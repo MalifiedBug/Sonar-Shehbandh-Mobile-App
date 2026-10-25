@@ -10,7 +10,6 @@ import { Btn, Chip, Empty, Header, Icon, StatusBadge, useToast } from "@/src/com
 import { DateField, TextField } from "@/src/components/fields";
 import { Reg } from "@/src/components/RegistrationView";
 import { FORMS } from "@/src/forms";
-import { NEWS_LEVELS } from "@/src/constants";
 
 const TABS = ["Pending", "Post", "Complaints", "Settings"] as const;
 const TYPES = [
@@ -89,14 +88,13 @@ function PostForm() {
   const [kind, setKind] = useState<"news" | "event" | "notice">("news");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [level, setLevel] = useState("village");
   const [location, setLocation] = useState("");
   const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
     try {
-      await api("/admin/posts", { method: "POST", body: { kind, title, body, level: kind === "news" ? level : null, location: location || null, event_date: kind === "event" ? date || null : null } });
+      await api("/admin/posts", { method: "POST", body: { kind, title, body, level: null, location: location || null, event_date: kind === "event" ? date || null : null } });
       toast("Published / प्रकाशित");
       setTitle(""); setBody(""); setLocation(""); setDate("");
     } catch (e: any) {
@@ -111,14 +109,6 @@ function PostForm() {
         <Chip label="Event / कार्यक्रम" active={kind === "event"} onPress={() => setKind("event")} testID="post-kind-event" />
         <Chip label="Notice / सूचना" active={kind === "notice"} onPress={() => setKind("notice")} testID="post-kind-notice" />
       </View>
-      {kind === "news" ? (
-        <>
-          <Text style={s.label}>Level / स्तर</Text>
-          <View style={[s.wrapRow, { marginBottom: 16 }]}>
-            {NEWS_LEVELS.map((l) => <Chip key={l.value} label={l.label} active={level === l.value} onPress={() => setLevel(l.value)} testID={`post-level-${l.value}`} />)}
-          </View>
-        </>
-      ) : null}
       <TextField label="Title / शीर्षक" value={title} onChangeText={setTitle} required testID="post-title-input" />
       <TextField label="Details / तपशील" value={body} onChangeText={setBody} required multiline maxLength={5000} testID="post-body-input" />
       {kind !== "notice" ? <TextField label="Location / ठिकाण" value={location} onChangeText={setLocation} testID="post-location-input" /> : null}

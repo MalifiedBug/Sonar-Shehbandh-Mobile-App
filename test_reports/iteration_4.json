@@ -1,0 +1,53 @@
+{
+  "summary": "Iteration 4: tested Social Worker/Business directory + prefill, News without level and /post/[id] detail, Events/Notices detail, Matrimony browse/filter/shortlist screen, admin post form without levels, and omkarlolge extra-admin role. Backend: 61/61 pytest pass (52 existing incl. updated news-level test + 9 new), also re-run after backend restart. Frontend (375x667 web preview): all requested flows work end to end. One minor race in matrimony shortlist state (see below). No deprecated Expo packages detected (expo-av / expo-barcode-scanner / expo-background-fetch not used).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/registrations", "issue": "sub_caste is not checked against the allowed SUB_CASTES list (e.g. 'Ahir' is accepted, but the frontend select needs 'Ahir Sonar / अहिर सोनार'). A bad value does not show in the select when the form is prefilled."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "matrimony.tsx shortlist state", "issue": "Race condition. The initial GET /shortlist runs through useLoad on focus at the same time as the profile list. If the user taps the heart before that GET returns, setShort(new Set(r.ids)) overwrites the optimistic add. The heart and counter then stay unfilled/(0) even though the server saved it, and it only fixes itself after a reload. This was seen on the first test run (toast said 'Added to shortlist' but the count stayed 0). Fix: merge the fetched ids with pending toggles, or ignore a stale fetch once a toggle has happened.", "testID": "matrimony-shortlist-<id>", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Matrimony", "issues": ["The Shortlisted tab filters the current list, which already has the category/sub-caste/search filters applied. So shortlisted profiles are hidden when a filter is active, while the tab label count (short.size) still counts all of them, including expired profiles. The count can therefore differ from the cards shown."]},
+      {"screen": "Directory /social_worker", "issues": ["The CTA label 'Add Yourself as Social Worker / समाजसेवक म्हणून नोंदणी' wraps to 2 lines at 375px inside the 48px button and looks cramped. Consider a shorter label or minHeight with padding."]},
+      {"screen": "Register business", "issues": ["The photo pickers are stacked vertically as asked, but each picker is a fixed 120-160px wide and centred, not full width."]},
+      {"screen": "Post detail not-found", "issues": ["For an unknown id the screen shows the raw API error 'Not found' instead of the bilingual friendly text, because error is set and wins over the fallback."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_features.py",
+    "/app/backend/tests/test_sonar_api.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/backend/tests/seed_iter4_ui.py",
+    "/app/backend/tests/seed_prefill_user.py",
+    "/app/backend/tests/seed_dir_items.py",
+    "/app/backend/tests/cleanup_iter4_ui.py"
+  ],
+  "action_items": [
+    "LOW: Fix the matrimony shortlist race where the initial or focus GET /shortlist overwrites optimistic toggles (matrimony.tsx lines 40-59).",
+    "LOW: Decide how the Shortlisted tab should behave. Either ignore the active filters on that tab, or make the count match the cards shown.",
+    "LOW: Show the friendly bilingual message on post-not-found (post/[id].tsx line 29).",
+    "OPTIONAL: Validate sub_caste on the backend against the allowed list."
+  ],
+  "critical_code_review_comments": [
+    "toggle_shortlist checks 'approved matrimony' only when inserting. Deleting works for any id, which is fine (unshortlisting an expired or removed profile).",
+    "list_registrations for matrimony is capped at 500 rows and the Shortlisted tab is computed on the client from that list. Shortlisted profiles beyond 500, or ones that are expired, will never show.",
+    "Social worker prefill reuses the user's earlier social_worker registration if one exists, including a rejected or pending one. Submitting again creates a duplicate pending entry. There is no check against duplicate social_worker registrations per user."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sonar_api.py (news without level now expects 200 + level null; invalid level expects 400)",
+    "/app/backend/tests/test_iter4_features.py (new)",
+    "/app/backend/tests/seed_iter4_ui.py, seed_prefill_user.py, seed_dir_items.py, cleanup_iter4_ui.py (new helper scripts)"
+  ],
+  "success_rate": {"backend": "100% (61/61)", "frontend": "~95% (all flows pass; 1 low-priority shortlist race seen once)"},
+  "seed_data_creation": "Created TEST_UI matrimony groom, long news post, a business, a social worker and a test_pf_* user with a member registration. All registrations and posts were deleted afterwards. The test_* signup users remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with EXPO_PUBLIC_BACKEND_URL exported and -n 0 (about 2 min, the DB is remote). The DB currently has 0 approved business and social_worker listings, so use seed_dir_items.py to create them and pass 'clean <ids>' to remove them. Matrimony UI needs an approved profile: seed_iter4_ui.py creates one. omkarlolge role=admin is checked via a direct DB query in test_iter4_features.py::TestExtraAdmin. The push 401 in the logs is expected.",
+  "rca_of_issue": "Shortlist race: two useLoad hooks fire on focus. The /registrations fetch can finish before /shortlist, so the grid becomes tappable while the shortlist GET is still in flight. Its setShort(new Set(r.ids)) then replaces state that the optimistic toggle already changed."
+}

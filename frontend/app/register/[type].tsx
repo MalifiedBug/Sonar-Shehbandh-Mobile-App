@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -9,6 +9,7 @@ import { DateField, RadioField, SelectField, TextField, TimeField } from "@/src/
 import { PhotoPicker } from "@/src/components/photo";
 import { convertValues, Field, FORMS, PhotoVal, validateForm } from "@/src/forms";
 import { api } from "@/src/api";
+import { useAuth } from "@/src/auth";
 
 const KB: Record<string, any> = { phone: "phone-pad", number: "number-pad", year: "number-pad", pincode: "number-pad", email: "email-address", url: "url" };
 const MAXLEN: Record<string, number> = { phone: 10, pincode: 6, year: 4, number: 3, gst: 15 };
@@ -28,6 +29,41 @@ export default function RegisterScreen() {
   const [saving, setSaving] = useState(false);
 
   const { errors, missing } = useMemo(() => (def ? validateForm(def, values, photos) : { errors: {}, missing: [] }), [def, values, photos]);
+  const { user } = useAuth();
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Social worker form: pre-fill from the user's own earlier entries (family registration), then their account name.
+  useEffect(() => {
+    if (type !== "social_worker") return;
+    (async () => {
+      let src: any = null;
+      try {
+        const mine = await api<any[]>("/registrations/mine");
+        src = mine.find((r) => r.type === "social_worker") ?? mine.find((r) => r.type === "member" && r.status === "approved") ?? mine.find((r) => r.type === "member");
+      } catch {
+        src = null;
+      }
+      const d = src?.data ?? {};
+      const fromMember = src?.type === "member";
+      const fill: Record<string, any> = fromMember
+        ? {
+            full_name: d.full_name, sub_caste: d.sub_caste, dob: d.dob, blood_group: d.blood_group,
+            phone: d.primary_mobile, whatsapp: d.whatsapp || d.primary_mobile, email: d.email,
+            address: [d.house, d.street, d.taluka, d.district].filter(Boolean).join(", "), pincode: d.pincode,
+            operating_area: [d.taluka, d.district].filter(Boolean).join(", "),
+          }
+        : { ...d };
+      if (!fill.full_name && user?.name) fill.full_name = user.name;
+      setValues((prev) => {
+        const next = { ...prev };
+        for (const [k, v] of Object.entries(fill)) if (v && !next[k]) next[k] = v;
+        return next;
+      });
+      const ph = fromMember ? src?.photos?.avatar : src?.photos?.photo;
+      if (ph) setPhotos((p) => (p.photo ? p : { ...p, photo: ph }));
+      setPrefilled(true);
+    })();
+  }, [type, user?.name]);
 
   if (!def) return <Header title="Not found" />;
 
@@ -162,6 +198,12 @@ export default function RegisterScreen() {
     <View style={s.root}>
       <Header title={def.title} subtitle="* Required / आवश्यक" testID={`register-${def.type}-screen`} />
       <KeyboardAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+        {prefilled ? (
+          <View style={s.prefill} testID="prefill-banner">
+            <Icon name="account-check" size={20} color={colors.success} />
+            <Text style={s.prefillText}>Filled from your profile — check it and complete the rest. / तुमची माहिती भरली आहे, उरलेली भरा.</Text>
+          </View>
+        ) : null}
         {def.category ? (
           <View style={s.catRow}>
             {def.category.options.map((o) => {
@@ -177,7 +219,7 @@ export default function RegisterScreen() {
 
         <View style={s.photoGrid}>
           {def.photos.map((p) => (
-            <View key={p.key} style={def.photos.length > 1 && p.shape !== "circle" ? s.photoHalf : s.photoFull}>
+            <View key={p.key} style={s.photoFull}>
               <PhotoPicker spec={p} value={photos[p.key]} onChange={(v) => setPhotos((prev) => { const n = { ...prev }; if (v) n[p.key] = v; else delete n[p.key]; return n; })} testID={`photo-${p.key}`} />
             </View>
           ))}
@@ -233,7 +275,8 @@ const useStyles = makeStyles((c) => ({
   catTextSel: { color: c.onBrand },
   photoGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", backgroundColor: c.surfaceSecondary, borderRadius: 16, borderWidth: 1, borderColor: c.border, paddingTop: 16, paddingHorizontal: 8 },
   photoFull: { width: "100%" },
-  photoHalf: { width: "50%" },
+  prefill: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, backgroundColor: c.successSoft, marginBottom: 16 },
+  prefillText: { flex: 1, fontSize: 13, color: c.success, fontWeight: "600" },
   secCard: { backgroundColor: c.surfaceSecondary, borderRadius: 16, borderWidth: 1, borderColor: c.border, padding: 12, paddingBottom: 2 },
   rowCard: { borderWidth: 1, borderColor: c.divider, borderRadius: 12, padding: 10, marginBottom: 10, backgroundColor: c.surface },
   rowHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },

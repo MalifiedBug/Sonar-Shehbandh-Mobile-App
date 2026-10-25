@@ -1,11 +1,11 @@
-import React, { useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import React from "react";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
 import { api, useLoad } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { Chip, Empty, Header, Icon, useToast } from "@/src/components/ui";
-import { NEWS_LEVELS } from "@/src/constants";
+import { Empty, Header, Icon, useToast } from "@/src/components/ui";
 
 export type Post = { id: string; kind: string; title: string; body: string; level?: string; location?: string; event_date?: string; created_at: string };
 
@@ -13,6 +13,7 @@ export function PostList({ kind, level = "", emptyText }: { kind: string; level?
   const s = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
   const { data, setData, loading, refreshing, reload, error } = useLoad(() => api<Post[]>(`/posts?kind=${kind}&level=${level}`), [kind, level]);
@@ -28,9 +29,8 @@ export function PostList({ kind, level = "", emptyText }: { kind: string; level?
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={colors.brand} />}
       ListEmptyComponent={<Empty text={error ?? emptyText} icon="newspaper-variant-outline" testID={`${kind}-empty`} />}
       renderItem={({ item }) => (
-        <View style={s.card} testID={`${kind}-item-${item.id}`}>
+        <Pressable onPress={() => router.push(`/post/${item.id}` as any)} style={({ pressed }) => [s.card, pressed && { opacity: 0.85 }]} testID={`${kind}-item-${item.id}`}>
           <View style={s.metaRow}>
-            {item.level ? <Text style={s.tag}>{NEWS_LEVELS.find((l) => l.value === item.level)?.label}</Text> : null}
             {item.event_date ? <View style={s.metaItem}><Icon name="calendar" size={14} color={colors.brand} /><Text style={s.metaStrong}>{item.event_date}</Text></View> : null}
             {item.location ? <View style={s.metaItem}><Icon name="map-marker-outline" size={14} color={colors.muted} /><Text style={s.meta}>{item.location}</Text></View> : null}
             <View style={{ flex: 1 }} />
@@ -39,9 +39,14 @@ export function PostList({ kind, level = "", emptyText }: { kind: string; level?
             ) : null}
           </View>
           <Text style={s.title}>{item.title}</Text>
-          <Text style={s.body}>{item.body}</Text>
-          <Text style={s.date}>{new Date(item.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
-        </View>
+          <Text style={s.body} numberOfLines={3}>{item.body}</Text>
+          <View style={s.metaRow}>
+            <Text style={s.date}>{new Date(item.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={s.more}>Read more / पुढे वाचा</Text>
+            <Icon name="chevron-right" size={16} color={colors.brandPrimary} />
+          </View>
+        </Pressable>
       )}
     />
   );
@@ -49,17 +54,10 @@ export function PostList({ kind, level = "", emptyText }: { kind: string; level?
 
 export default function News() {
   const s = useStyles();
-  const [level, setLevel] = useState("");
   return (
     <View style={s.root}>
-      <Header title="News / बातम्या" subtitle="Village → Taluka → District → State" />
-      <View style={s.chipRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-          <Chip label="All / सर्व" active={!level} onPress={() => setLevel("")} testID="news-level-all" />
-          {NEWS_LEVELS.map((l) => <Chip key={l.value} label={l.label} active={level === l.value} onPress={() => setLevel(l.value)} testID={`news-level-${l.value}`} />)}
-        </ScrollView>
-      </View>
-      <PostList kind="news" level={level} emptyText="No news yet / अद्याप बातम्या नाहीत" />
+      <Header title="News / बातम्या" subtitle="Community updates / समाज बातम्या" />
+      <PostList kind="news" emptyText="No news yet / अद्याप बातम्या नाहीत" />
     </View>
   );
 }
@@ -77,4 +75,5 @@ const useStyles = makeStyles((c) => ({
   title: { fontSize: 16, fontWeight: "800", color: c.onSurface },
   body: { fontSize: 14, color: c.onSurfaceSecondary, lineHeight: 21 },
   date: { fontSize: 11, color: c.muted },
+  more: { fontSize: 12, fontWeight: "700", color: c.brandPrimary },
 }));

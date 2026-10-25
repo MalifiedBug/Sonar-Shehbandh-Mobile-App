@@ -14,10 +14,10 @@ type Card = { title: string; sub: string; icon: string; badge?: string; terms?: 
 
 const CARDS: Card[] = [
   { title: "Add New Members", sub: "Family Member Registration", icon: "account-group", route: "/directory/member", testID: "dash-card-members" },
-  { title: "Social Workers", sub: "Community Help & Volunteers", icon: "hand-heart", terms: "social_worker", testID: "dash-card-social-workers" },
-  { title: "Business Directory", sub: "MSME & Shop Act Registration", icon: "store", terms: "business", testID: "dash-card-business" },
+  { title: "Social Workers", sub: "Community Help & Volunteers", icon: "hand-heart", route: "/directory/social_worker", testID: "dash-card-social-workers" },
+  { title: "Business Directory", sub: "MSME & Shop Act Registration", icon: "store", route: "/directory/business", testID: "dash-card-business" },
   { title: "News", sub: "Live Updates & AI Agent", icon: "newspaper", terms: "news", testID: "dash-card-news" },
-  { title: "MATRIMONY", sub: "Marriage Bureau & Biodata", icon: "heart", terms: "matrimony", testID: "dash-card-matrimony" },
+  { title: "MATRIMONY", sub: "Marriage Bureau & Biodata", icon: "heart", route: "/matrimony", testID: "dash-card-matrimony" },
   { title: "Events", sub: "Festival & Gatherings", icon: "calendar-star", route: "/events", testID: "dash-card-events" },
   { title: "Notice Board", sub: "Circulars & Updates", icon: "bullhorn", badge: "New", route: "/events?tab=1", testID: "dash-card-notice" },
   { title: "Rules", sub: "Sanstha Bylaws & Constitution", icon: "book-open-variant", route: "/rules", testID: "dash-card-rules" },
@@ -28,7 +28,7 @@ const LINKS = [
   { label: "Members", icon: "account-multiple", route: "/directory/member", testID: "dash-link-members" },
   { label: "Businesses", icon: "storefront-outline", route: "/directory/business", testID: "dash-link-business" },
   { label: "Social Workers", icon: "hand-heart-outline", route: "/directory/social_worker", testID: "dash-link-social" },
-  { label: "Matrimony", icon: "heart-outline", route: "/directory/matrimony", testID: "dash-link-matrimony" },
+  { label: "Matrimony", icon: "heart-outline", route: "/matrimony", testID: "dash-link-matrimony" },
   { label: "My Submissions", icon: "clipboard-text-outline", route: "/mine", testID: "dash-link-mine" },
 ];
 

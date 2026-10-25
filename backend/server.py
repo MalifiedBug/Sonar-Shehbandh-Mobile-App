@@ -555,8 +555,8 @@ async def list_posts(kind: str, level: str = "", user: User = Depends(current_us
 async def create_post(body: PostIn, admin: User = Depends(require_admin)):
     if body.kind not in {"news", "event", "notice"}:
         raise HTTPException(400, "Invalid kind")
-    if body.kind == "news" and body.level not in {"village", "taluka", "district", "state"}:
-        raise HTTPException(400, "News needs a level")
+    if body.level is not None and body.level not in {"village", "taluka", "district", "state"}:
+        raise HTTPException(400, "Invalid level")
     row = await pg.fetchrow(
         "insert into sonar.posts (id, kind, title, body, level, location, event_date, created_at) "
         "values ($1, $2, $3, $4, $5, $6, $7, $8) returning *",
@@ -566,6 +566,33 @@ async def create_post(body: PostIn, admin: User = Depends(require_admin)):
     route = {"news": "/news", "event": "/events", "notice": "/events?tab=1"}[post.kind]
     notify([u for u in await all_user_ids() if u != admin.id], f"{heading}: {post.title}"[:120], post.body[:180], route, f"post-{post.id}")
     return post.out()
+
+
+@api.get("/posts/{pid}")
+async def get_post(pid: str, user: User = Depends(current_user)):
+    row = await pg.fetchrow("select * from sonar.posts where id = $1", pid)
+    if not row:
+        raise HTTPException(404, "Not found")
+    return Post.from_row(row).out()
+
+
+# ---------------------------------------------------------------- matrimony shortlist
+@api.get("/shortlist")
+async def my_shortlist(user: User = Depends(current_user)):
+    rows = await pg.fetch("select registration_id from sonar.shortlists where user_id = $1 order by created_at desc", user.id)
+    return {"ids": [r["registration_id"] for r in rows]}
+
+
+@api.post("/shortlist/{rid}")
+async def toggle_shortlist(rid: str, user: User = Depends(current_user)):
+    if await pg.execute("delete from sonar.shortlists where user_id = $1 and registration_id = $2", user.id, rid):
+        return {"shortlisted": False}
+    ok = await pg.fetchval("select 1 from sonar.registrations where id = $1 and type = 'matrimony' and status = 'approved'", rid)
+    if not ok:
+        raise HTTPException(404, "Profile not found")
+    await pg.execute("insert into sonar.shortlists (user_id, registration_id, created_at) values ($1, $2, $3) on conflict do nothing",
+                     user.id, rid, pg.now())
+    return {"shortlisted": True}
 
 
 @api.delete("/admin/posts/{pid}")
@@ -745,6 +772,9 @@ async def startup():
     elif not bcrypt.checkpw(os.environ["ADMIN_PASSWORD"].encode(), existing["password_hash"].encode()) or existing["role"] != "admin":
         await pg.execute("update sonar.users set password_hash = $2, role = 'admin' where id = $1",
                          existing["id"], hash_pw(os.environ["ADMIN_PASSWORD"]))
+    extra_admins = [u.strip().lower() for u in os.environ.get("EXTRA_ADMIN_USERNAMES", "").split(",") if u.strip()]
+    if extra_admins:
+        await pg.execute("update sonar.users set role = 'admin' where username = any($1::text[]) and role <> 'admin'", extra_admins)
     try:
         await run_in_threadpool(storage.ensure_bucket)
         logger.info("Supabase storage ready")

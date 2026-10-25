@@ -37,6 +37,13 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - One-off copy script: backend/migrate_mongo_to_supabase.py (safe to re-run) copied users, entries, posts, settings, complaints, alerts and photos
 - App API unchanged, so no frontend changes; existing logins keep working because user ids were preserved
 
+## Iteration 4 (2026-06)
+- Social Workers & Business cards open their directories; full-width "Add Yourself as Social Worker" / "Register Business" buttons → terms → form
+- Social worker form pre-filled from the user's own family registration (or account name); business photo pickers stacked
+- News: level chips removed; every news/event/notice opens its own page /post/[id] (GET /api/posts/{id})
+- Matrimony: browse screen /matrimony with profile grid, filters, search, shortlist (sonar.shortlists, /api/shortlist), and an Add Profile button
+- omkarlolge made admin through EXTRA_ADMIN_USERNAMES (applied on startup)
+
 ## Backlog
 - P1: Remaining More modules (Flat Allocation, Maintenance, Minutes, Audits, Vendors, Assets), Wings & Vehicles
 - P1: Biodata PDF share, matrimony renewal reminder, edit after submit

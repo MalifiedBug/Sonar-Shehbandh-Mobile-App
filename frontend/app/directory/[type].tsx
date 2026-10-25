@@ -12,10 +12,10 @@ import { FORMS } from "@/src/forms";
 import { englishPart, SUB_CASTES, TermsKind } from "@/src/constants";
 
 const REGISTER_LABEL: Record<string, string> = {
-  member: "Register Family / नोंदणी करा",
-  business: "List Business / व्यवसाय नोंदवा",
-  social_worker: "Apply / अर्ज करा",
-  matrimony: "Add Biodata / बायोडाटा जोडा",
+  member: "Register Family / कुटुंब नोंदणी करा",
+  business: "Register Business / व्यवसाय नोंदवा",
+  social_worker: "Add Yourself as Social Worker / समाजसेवक म्हणून नोंदणी",
+  matrimony: "Add Matrimony Profile / बायोडाटा जोडा",
 };
 
 export default function Directory() {
@@ -46,16 +46,13 @@ export default function Directory() {
 
   return (
     <View style={s.root}>
-      <Header
-        title={def.dirTitle}
-        subtitle={`${data?.length ?? 0} approved listings`}
-        right={
-          <Pressable style={s.addBtn} onPress={() => setTerms(type as TermsKind)} testID="directory-register-button">
-            <Icon name="plus" size={18} color={colors.white} />
-            <Text style={s.addText}>{englishPart(REGISTER_LABEL[type!]).split(" ")[0]}</Text>
-          </Pressable>
-        }
-      />
+      <Header title={def.dirTitle} subtitle={`${data?.length ?? 0} approved listings / मंजूर नोंदी`} />
+      <View style={s.ctaWrap}>
+        <Pressable style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]} onPress={() => setTerms(type as TermsKind)} testID="directory-register-button">
+          <Icon name={type === "social_worker" ? "account-plus" : type === "business" ? "store-plus" : "plus-circle"} size={20} color={colors.white} />
+          <Text style={s.ctaText}>{REGISTER_LABEL[type!]}</Text>
+        </Pressable>
+      </View>
       <View style={s.searchWrap}>
         <View style={s.search}>
           <Icon name="magnify" size={20} color={colors.muted} />
@@ -111,8 +108,9 @@ export default function Directory() {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
-  addBtn: { flexDirection: "row", alignItems: "center", gap: 4, height: 40, paddingHorizontal: 12, borderRadius: 20, backgroundColor: c.brandPrimary, marginRight: 4 },
-  addText: { color: c.white, fontWeight: "700", fontSize: 13 },
+  ctaWrap: { paddingHorizontal: 16, paddingTop: 12 },
+  cta: { minHeight: 48, borderRadius: 12, backgroundColor: c.brandPrimary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+  ctaText: { color: c.white, fontWeight: "800", fontSize: 14 },
   searchWrap: { paddingHorizontal: 16, paddingTop: 12 },
   search: { flexDirection: "row", alignItems: "center", gap: 8, height: 48, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.white, paddingHorizontal: 12 },
   searchInput: { flex: 1, fontSize: 15, color: c.onSurface, height: 48 },

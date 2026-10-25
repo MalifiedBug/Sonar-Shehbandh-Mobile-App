@@ -159,7 +159,11 @@ class TestRegistrations:
 # --- posts / rules / emergency / complaints
 class TestContent:
     def test_posts(self, admin_token, user):
-        r = requests.post(f"{API}/admin/posts", headers=H(admin_token), json={"kind": "news", "title": "TEST", "body": "b"})
+        # level is now optional for news (level chips removed); invalid level still rejected
+        r = requests.post(f"{API}/admin/posts", headers=H(admin_token), json={"kind": "news", "title": "TEST no level", "body": "b"})
+        assert r.status_code == 200 and r.json().get("level") is None
+        requests.delete(f"{API}/admin/posts/{r.json()['id']}", headers=H(admin_token))
+        r = requests.post(f"{API}/admin/posts", headers=H(admin_token), json={"kind": "news", "title": "TEST", "body": "b", "level": "planet"})
         assert r.status_code == 400
         r = requests.post(f"{API}/admin/posts", headers=H(admin_token), json={"kind": "news", "title": "TEST news", "body": "b", "level": "district"})
         assert r.status_code == 200
