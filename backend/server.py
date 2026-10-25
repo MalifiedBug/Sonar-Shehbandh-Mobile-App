@@ -16,6 +16,8 @@ import logging
 import bcrypt
 import jwt
 import requests
+import asyncio
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -127,6 +129,64 @@ def oid(v: str) -> ObjectId:
         raise HTTPException(404, "Not found")
 
 
+# ---------------------------------------------------------------- push (Emergent managed relay)
+PUSH_BASE_URL = "https://integrations.emergentagent.com"
+PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
+push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": PUSH_KEY}, timeout=10.0)
+
+
+async def send_push(recipients: List[str], data: dict, idempotency_key: Optional[str] = None, _attempt: int = 0) -> None:
+    if not recipients:
+        return
+    if len(recipients) > 100:
+        raise ValueError("max 100 recipients per /trigger call; chunk before sending")
+    if "title" not in data or "message" not in data:
+        raise ValueError("data must include title and message")
+    payload: dict = {"recipients": recipients, "data": data}
+    if idempotency_key:
+        payload["$idempotency_key"] = idempotency_key
+    resp = await push_client.post("/api/v1/push/trigger", json=payload)
+    if resp.status_code == 401:
+        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
+    code = resp.json().get("code", "") if resp.headers.get("content-type", "").startswith("application/json") else ""
+    if code == "idempotency_key_in_progress" and idempotency_key and _attempt < 3:
+        await asyncio.sleep(3)
+        return await send_push(recipients, data, idempotency_key=idempotency_key, _attempt=_attempt + 1)
+    if code in ("insufficient_credits", "integration_disabled", "daily_limit_reached"):
+        logger.warning(f"Push paused: {code} ({resp.status_code}): {resp.json().get('message', '')}")
+        return
+    if resp.status_code >= 500:
+        raise HTTPException(502, "Push provider unavailable")
+    resp.raise_for_status()
+
+
+async def _notify(recipients: List[str], data: dict, key: Optional[str]):
+    for i in range(0, len(recipients), 100):
+        try:
+            await send_push(recipients[i:i + 100], data, idempotency_key=f"{key}-{i}" if key else None)
+        except Exception as e:
+            logger.warning(f"Push failed (non-blocking): {e}")
+
+
+def notify(recipients: List[str], title: str, message: str, action_url: Optional[str] = None, key: Optional[str] = None):
+    """Fire-and-forget push; never blocks or fails the main request."""
+    recipients = [r for r in dict.fromkeys(recipients) if r]
+    if not recipients:
+        return
+    data = {"title": title, "message": message}
+    if action_url:
+        data["action_url"] = action_url
+    asyncio.create_task(_notify(recipients, data, key))
+
+
+async def admin_ids() -> List[str]:
+    return [str(d["_id"]) for d in await db.users.find({"role": "admin"}, {"_id": 1}).to_list(50)]
+
+
+async def all_user_ids() -> List[str]:
+    return [str(d["_id"]) for d in await db.users.find({}, {"_id": 1}).to_list(100000)]
+
+
 # ---------------------------------------------------------------- auth
 class SignupIn(BaseModel):
     username: str = Field(min_length=3, max_length=30)
@@ -197,6 +257,27 @@ async def login(body: LoginIn):
 @api.get("/auth/me")
 async def me(user: User = Depends(current_user)):
     return user.out()
+
+
+class RegisterPushBody(BaseModel):
+    user_id: str
+    platform: str
+    device_token: str = Field(min_length=10)
+
+
+@api.post("/register-push", status_code=201)
+async def register_push(body: RegisterPushBody, user: User = Depends(current_user)):
+    if body.platform not in ("android", "ios"):
+        raise HTTPException(400, "platform must be android or ios")
+    # Always bind the device to the authenticated user, never to a client-supplied id.
+    payload = {"user_id": user.id, "platform": body.platform, "device_token": body.device_token}
+    resp = await push_client.post("/api/v1/push/users/register", json=payload)
+    if resp.status_code == 401:
+        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
+    if resp.status_code >= 500:
+        raise HTTPException(502, "Push provider unavailable")
+    resp.raise_for_status()
+    return {"status": "registered"}
 
 
 # ---------------------------------------------------------------- storage
@@ -293,6 +374,7 @@ async def pincode(pin: str, user: User = Depends(current_user)):
 
 # ---------------------------------------------------------------- registrations
 REG_TYPES = {"member", "matrimony", "business", "social_worker"}
+TYPE_LABEL = {"member": "Member", "matrimony": "Matrimony", "business": "Business", "social_worker": "Social Worker"}
 
 
 class RegistrationIn(BaseModel):
@@ -360,6 +442,8 @@ async def create_registration(body: RegistrationIn, user: User = Depends(current
                        photos=body.photos, photo_paths=paths, owner_id=user.id, owner_name=user.name, created_at=now_iso())
     res = await db.registrations.insert_one(reg.to_mongo())
     reg.id = str(res.inserted_id)
+    notify([a for a in await admin_ids() if a != user.id], "New submission / नवीन अर्ज",
+           f"{reg.title} ({TYPE_LABEL[reg.type]}) is waiting for approval", f"/detail/{reg.id}", f"sub-{reg.id}")
     return reg_out(reg)
 
 
@@ -430,6 +514,8 @@ async def approve(rid: str, admin: User = Depends(require_admin)):
     if doc["type"] == "matrimony":
         upd["expires_at"] = (now + timedelta(days=365)).isoformat()
     await db.registrations.update_one({"_id": doc["_id"]}, {"$set": upd})
+    notify([str(doc["owner_id"])], "Approved / मंजूर ✅",
+           f"Your {TYPE_LABEL[doc['type']]} entry \"{doc['title']}\" is now live", f"/detail/{rid}", f"appr-{rid}-{upd['approved_at']}")
     return reg_out(Registration.from_mongo({**doc, **upd}))
 
 
@@ -440,6 +526,8 @@ async def reject(rid: str, body: RejectIn, admin: User = Depends(require_admin))
         raise HTTPException(404, "Not found")
     upd = {"status": "rejected", "reject_reason": body.reason}
     await db.registrations.update_one({"_id": doc["_id"]}, {"$set": upd})
+    msg = f"Your {TYPE_LABEL[doc['type']]} entry \"{doc['title']}\" was not approved"
+    notify([str(doc["owner_id"])], "Not approved / नामंजूर", msg + (f": {body.reason}" if body.reason else ""), f"/detail/{rid}")
     return reg_out(Registration.from_mongo({**doc, **upd}))
 
 
@@ -479,6 +567,9 @@ async def create_post(body: PostIn, admin: User = Depends(require_admin)):
     post = Post(**body.model_dump(), created_at=now_iso())
     res = await db.posts.insert_one(post.to_mongo())
     post.id = str(res.inserted_id)
+    heading = {"news": "News / बातमी", "event": "Event / कार्यक्रम", "notice": "Notice / सूचना"}[post.kind]
+    route = {"news": "/news", "event": "/events", "notice": "/events?tab=1"}[post.kind]
+    notify([u for u in await all_user_ids() if u != admin.id], f"{heading}: {post.title}"[:120], post.body[:180], route, f"post-{post.id}")
     return post.out()
 
 
@@ -578,6 +669,8 @@ async def create_complaint(body: ComplaintIn, user: User = Depends(current_user)
     c = Complaint(**body.model_dump(), owner_id=user.id, owner_name=user.name, created_at=now_iso())
     res = await db.complaints.insert_one(c.to_mongo())
     c.id = str(res.inserted_id)
+    notify([a for a in await admin_ids() if a != user.id], f"New {c.kind} / नवीन {'तक्रार' if c.kind == 'complaint' else 'सूचना'}",
+           f"{c.subject} — from {user.name}"[:180], "/admin", f"cmp-{c.id}")
     return c.out()
 
 

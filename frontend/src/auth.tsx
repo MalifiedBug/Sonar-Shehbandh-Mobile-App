@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { storage } from "@/src/utils/storage";
 import { api, setToken } from "@/src/api";
+import { registerForPush } from "@/src/push";
 
 export type User = { id: string; username: string; name: string; role: "user" | "admin" };
 
@@ -19,6 +20,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Register the device for push on login and on every app open.
+  useEffect(() => {
+    if (user?.id) registerForPush(user.id);
+  }, [user?.id]);
   useEffect(() => {
     (async () => {
       const t = await storage.secureGet<string | null>(KEY, null);

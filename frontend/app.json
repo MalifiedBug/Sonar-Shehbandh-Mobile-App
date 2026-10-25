@@ -51,6 +51,12 @@
         {
           "photosPermission": "Add member, biodata and shop photos"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#8B1818"
+        }
       ]
     ],
     "experiments": {

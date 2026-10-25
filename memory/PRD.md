@@ -18,6 +18,12 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - My Submissions with status; News with level filter; Events & Notice Board tabs; Rules; Emergency tap-to-call
 - Photo privacy: only the owner, the admin, or anyone viewing an approved listing can see a photo
 
+## Push notifications (2026-06)
+- Emergent managed push relay: POST /api/register-push (binds the device to the logged-in user), send_push helper, fire-and-forget notify()
+- Triggers: entry approved/rejected → owner; news/event/notice posted → all members; new submission or complaint → admins
+- Frontend: handler + Android channel at module scope, warm/cold tap routing, weekly settings nudge, registration on every app open
+- PENDING: frontend/google-services.json. The file the user supplied was for package com.aistudio.societymanager.smgr; the app's package is com.emergent.sonarshehbandh.hxexh3. Once the correct file arrives, set expo.android.googleServicesFile in app.json. FIREBASE_ANDROID_API_KEY is saved in the backend secrets.
+
 ## Backlog
 - P1: Remaining More modules (Flat Allocation, Maintenance, Minutes, Audits, Vendors, Assets), Wings & Vehicles
 - P1: Biodata PDF share, matrimony renewal reminder, edit after submit
