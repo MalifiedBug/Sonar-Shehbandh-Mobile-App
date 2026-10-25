@@ -29,6 +29,14 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - Dashboard bell with unread badge; /notifications screen with tap-to-open, unread dots, Read all
 - Complaint alerts open Admin → Complaints tab
 
+## Supabase migration (2026-06)
+- Database moved from MongoDB to Supabase Postgres, in its own schema `sonar` so the user's existing public tables are never touched
+- Schema: backend/migrations/001_init.sql (runs on every start, safe to repeat). RLS is on and phone/browser keys get no access; the FastAPI server connects directly with asyncpg
+- Photos moved to a private Supabase Storage bucket `sonar-photos`, still served only through /api/files with the same privacy checks
+- Secrets: SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_DB_URL (session pooler; password replaced from SUPABASE_DB_PASSWORD)
+- One-off copy script: backend/migrate_mongo_to_supabase.py (safe to re-run) copied users, entries, posts, settings, complaints, alerts and photos
+- App API unchanged, so no frontend changes; existing logins keep working because user ids were preserved
+
 ## Backlog
 - P1: Remaining More modules (Flat Allocation, Maintenance, Minutes, Audits, Vendors, Assets), Wings & Vehicles
 - P1: Biodata PDF share, matrimony renewal reminder, edit after submit

@@ -1,0 +1,43 @@
+{
+  "summary": "Full regression after the move from Mongo and Emergent storage to Supabase (Postgres schema sonar plus the private bucket sonar-photos). Backend: the existing suites pass, 36 of 36 (test_sonar_api.py and test_notifications.py). No test code changes were needed. A new Supabase suite, test_supabase_migration.py, passes 16 of 16. It covers auth (duplicate username returns 409, also for an uppercase duplicate), the admin id kept (6ade095cf6a303c3063a485a, same as in Mongo) and the migrated inbox_user login with its old notifications. It covers upload of png and jpeg and fetch with ?token= or a Bearer header (no token 401, missing file 404, text/plain 400, over 8MB 413). Another user cannot fetch a photo while its entry is pending (404); after approval they can (200). Using another user's photo returns 400. It covers search on title and data fields, a literal % and _ (escaped correctly) and quote/backslash input, the sub_caste and matrimony category filters, matrimony approval setting expires_at to about +365 days, matrimony with fewer than 3 photos (400), reject with a reason, and delete then delete again (404). Migration parity: every Mongo _id in users, registrations, files, posts, complaints and notifications exists in Supabase (0 missing). After the background script finished, all 10 old photos are fetched from Supabase with status 200. Frontend at 375x667: admin login, dashboard, bell badge and notification list, Members directory (10 listings; search for '100%' gives 0 results, which is correct). An approved entry's detail page shows its photo loaded from /api/files. The new-member form auto-fills taluka, district and state from PIN 411001 (Pune City / Pune / Maharashtra), submits (POST 200, pending) and lands on /mine. The entry then appears in Admin Panel > Pending, is approved there, and shows in the directory. inbox_user login, bell and read-all work. Main finding: speed. Each DB query takes about 450ms because the Supabase pooler is in aws ap-northeast and the round trip is about 150ms. A query costs prepare + execute + pool reset, and each API call costs about 1 to 1.5s. 30 parallel requests took 7.8s with pool max_size=5.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ALL (database.py connect/fetch)", "issue": "Each API call takes about 0.5 to 1.5s. One query costs about 450ms: prepare and execute (statement_cache_size=0 forces 2 round trips) plus the pool reset on release (1 more round trip), at about 150ms per round trip to the aws ap-northeast pooler. Measured: GET /auth/me 563ms, /registrations 1040ms, /admin/stats 1456ms. 30 parallel requests took 7.8s because the pool max_size is 5. Tested: passing a no-op reset to create_pool brings select 1 from 453ms to 303ms."},
+      {"endpoint": "GET /api/files/{path}", "issue": "The non-owner check '$1 = any(photo_paths)' cannot use the GIN index registrations_photo_paths_idx. Use 'photo_paths @> array[$1]' instead. Small cost now."},
+      {"endpoint": "DELETE /api/admin/registrations/{rid}", "issue": "Deleting a registration leaves its photo objects in the Supabase bucket and its sonar.files rows behind. Over time this adds up to orphaned storage."},
+      {"endpoint": "POST /api/upload", "issue": "The content type is taken from the client header only, with no magic-byte check, so any bytes labelled image/png are stored."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sonar_api.py",
+    "/app/backend/tests/test_notifications.py",
+    "/app/backend/tests/test_supabase_migration.py",
+    "/app/backend/tests/check_migration_parity.py",
+    "/app/test_reports/pytest/pytest_results_iter3.xml",
+    "/app/test_reports/pytest/pytest_supabase_iter3.xml"
+  ],
+  "action_items": [
+    "Speed (recommended): in database.connect, pass reset=<async no-op> to asyncpg.create_pool. The app uses no session state, so this is safe. Re-enable the statement cache, because port 5432 on the pooler is session mode and supports prepared statements. Raise max_size to about 10-15. Consider a Supabase project region close to the app server. Together these should cut API latency by more than half.",
+    "Change the photo visibility query to 'photo_paths @> array[$1]::text[]' so it uses the GIN index.",
+    "Optional: when an admin deletes a registration, also remove its photos from the bucket and from sonar.files."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 749 lines, over the 700-line guideline. Consider splitting routes into modules (auth, registrations, posts, notifications).",
+    "Migration runs on every startup (migrate() runs all the DDL plus the revoke/RLS statements). It is idempotent but adds startup round trips.",
+    "No secrets or URLs are hardcoded. The Supabase access is server-only and the sonar schema is revoked from anon and authenticated with RLS on. The public schema was not touched."
+  ],
+  "updated_files": ["/app/backend/tests/test_supabase_migration.py (new)", "/app/backend/tests/check_migration_parity.py (new, one-off parity script)"],
+  "success_rate": {"backend": "100% (52/52)", "frontend": "100% (all smoke flows)"},
+  "seed_data_creation": "TEST_SB_* registrations and test_sb_* or test_sbui_* users were created by the tests. The registrations were deleted at the end; the throwaway users remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with EXPO_PUBLIC_BACKEND_URL exported and -n 0 for single-file runs (pytest.ini adds xdist). The full suite runs in about 70s because of Supabase latency. Stacked Expo web screens stay in the DOM, so use :visible. The member form's Full Name field rejects '_' and digits, so use a name like 'Testsb Formmember'. Form testIDs: field-<key>; selects use field-<key>-option-N. migrate_mongo_to_supabase.py has finished (the 10 photos were copied). Push 401 is expected.",
+  "rca_of_issue": "Latency RCA: _conn_params points at the Supabase pooler in aws ap-northeast (port 5432, session mode). One round trip is about 150ms. With statement_cache_size=0, asyncpg does a separate prepare and execute (2 round trips), and the pool runs a reset on release (1 round trip), so one query is about 450ms. Most endpoints run 2-3 queries (token user lookup plus data), which gives about 1-1.5s."
+}
