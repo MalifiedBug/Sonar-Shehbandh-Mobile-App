@@ -1,0 +1,44 @@
+{
+  "summary": "First full run (backend + Expo web UI at 375x667). Backend: 22/22 pytest pass, covering auth, pincode, upload/download, registrations of all 4 types, the admin approve/reject/delete/stats flow with 403 checks, posts, rules, emergency and complaints. Frontend: every requested flow passed. That covers login/signup, the dashboard title and 9 cards, the More sheet (Complaints opens, other items show a Coming soon toast) and the terms dialogs on 4 cards (decline closes, accept navigates). The member form passed end to end: PIN 411001 auto-fill, Convert to English, Save disabled until the form is complete, submit, Pending in My Submissions, admin approve, then the entry shows in the directory with search and sub-caste chips. Events and Notice tabs, Rules, Emergency, admin Post/Complaints/Settings, photo upload with the 1.0-3.0x zoom slider, matrimony age rules and the GST check also passed. Only low/medium issues found. Deprecated packages detected: none.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/registrations", "issue": "No server-side validation of form data. Required fields, phone, email, pincode, GST and the matrimony age (18/21) rules exist only on the client. Confirmed: POST matrimony with dob 01/01/2015 and primary_mobile '123' returned 200."},
+      {"endpoint": "GET /api/files/{path}", "issue": "Any logged-in user can download any uploaded file, including photos of pending or rejected entries. There is no owner, approved-status or admin check."},
+      {"endpoint": "startup", "issue": "Uses @app.on_event, which FastAPI has deprecated in favour of lifespan handlers."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Login/Signup", "issue": "The 'Invalid username or password' error stays visible after switching from Sign In to Sign Up. The error is not cleared when the mode changes.", "testID": "login-error", "priority": "low"},
+      {"component": "Matrimony DOB validation", "issue": "A future DOB (01/01/2030) shows 'Groom must be at least 21 years old' instead of 'Date cannot be in the future', because def.validate overwrites the field error (Object.assign in validateForm).", "testID": "field-dob-error", "priority": "low"},
+      {"component": "Transliteration", "issue": "The rule-based output is awkward for common words: फ्लॅट -> 'Phlet' (expected Flat) and शिवाजी -> 'Shivajee' (expected Shivaji). The requested name गणेश दत्तात्रय सोनार -> 'Ganesh Dattatray Sonar' converts correctly.", "testID": "convert-to-english-button", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Register forms", "issues": ["The footer only says 'Please fix 1 highlighted field' without naming the field or scrolling to it. On long forms the user has to search for the error."]},
+      {"screen": "Deep links", "issues": ["Opening /register/<type> directly skips the terms dialog that the dashboard enforces."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_sonar_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Add server-side validation in POST /api/registrations: required title, phone/email/pincode/GST regex, matrimony minimum age by category.",
+    "Restrict GET /api/files to the file owner, the admin, or files referenced by approved registrations.",
+    "Clear the login error when switching between the Sign In and Sign Up tabs.",
+    "In the matrimony validate step, keep the 'Date cannot be in the future' error and skip the age check when the date is in the future.",
+    "Optional: improve transliteration for ॅ and final ी (e.g. Shivaji, Flat), and name the invalid field in the footer hint."
+  ],
+  "critical_code_review_comments": [
+    "Form validation exists only on the client (forms.ts validateForm), so the API accepts any payload.",
+    "Pincode lookups are cached in db.pincodes without a unique index, so concurrent first lookups can insert duplicates (harmless).",
+    "No deprecated Expo packages (expo-av, expo-barcode-scanner, expo-background-fetch) are used. No react-native SafeAreaView is used; the app uses safe-area-context insets."
+  ],
+  "updated_files": ["/app/backend/tests/test_sonar_api.py"],
+  "success_rate": {"backend": "100%", "frontend": "100% of requested flows (3 low-severity UI bugs)"},
+  "seed_data_creation": "test_* users created via signup. One approved member 'Ganesh Zq...' and TEST* news/event/notice posts left in the DB from UI tests. Complaints were created and one was resolved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: export EXPO_PUBLIC_BACKEND_URL=... && pytest /app/backend/tests/test_sonar_api.py. Names in member forms must be letters only (digits fail the name regex). Web photo upload works via page.expect_file_chooser on photo-<key>. Dropdowns use field-<key> then field-<key>-option-<i>. The Members card opens the directory; directory-register-button opens the terms dialog.",
+  "rca_of_issue": ""
+}
