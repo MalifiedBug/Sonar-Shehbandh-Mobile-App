@@ -8,6 +8,7 @@ import { useAuth } from "@/src/auth";
 import { Icon, Sheet, useToast } from "@/src/components/ui";
 import { TermsModal } from "@/src/components/TermsModal";
 import { MORE_ITEMS, TermsKind } from "@/src/constants";
+import { api, useLoad } from "@/src/api";
 
 type Card = { title: string; sub: string; icon: string; badge?: string; terms?: TermsKind; route?: string; testID: string };
 
@@ -43,12 +44,20 @@ export default function Dashboard() {
   const [more, setMore] = useState(false);
   const [menu, setMenu] = useState(false);
   const cardW = (Math.min(width, 600) - 32 - 16) / 3;
+  const unread = useLoad(() => api<{ count: number }>("/notifications/unread-count")).data?.count ?? 0;
   const links = user?.role === "admin" ? [{ label: "Admin Panel", icon: "shield-account", route: "/admin", testID: "dash-link-admin" }, ...LINKS] : LINKS;
 
   return (
     <View style={s.root}>
       <View style={[s.top, { paddingTop: insets.top + 8 }]}>
-        <View style={{ width: 44 }} />
+        <Pressable style={s.avatarBtn} onPress={() => router.push("/notifications")} testID="dashboard-bell-button">
+          <Icon name={unread ? "bell-ring" : "bell-outline"} size={26} color={colors.brand} />
+          {unread ? (
+            <View style={s.bellBadge} testID="dashboard-bell-badge">
+              <Text style={s.bellBadgeText}>{unread > 99 ? "99+" : unread}</Text>
+            </View>
+          ) : null}
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={s.banner} testID="dashboard-header-title">॥ जय श्री संत नरहरी महाराज ॥</Text>
           <Text style={s.app}>Sonar Shehbandh Community / सोनार शेहबंध समाज</Text>
@@ -140,6 +149,8 @@ const useStyles = makeStyles((c) => ({
   banner: { fontSize: 19, fontWeight: "bold", color: c.brand, textAlign: "center" },
   app: { fontSize: 11, color: c.muted, textAlign: "center", marginTop: 4 },
   avatarBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  bellBadge: { position: "absolute", top: 4, right: 2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: c.maroonBright, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: c.surfaceSecondary },
+  bellBadgeText: { color: c.white, fontSize: 10, fontWeight: "800" },
   greet: { paddingHorizontal: 16, paddingTop: 16 },
   greetText: { fontSize: 16, fontWeight: "700", color: c.onSurface },
   links: { gap: 8, paddingHorizontal: 16, paddingVertical: 12 },

@@ -133,6 +133,7 @@ def oid(v: str) -> ObjectId:
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
 push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": PUSH_KEY}, timeout=10.0)
+_bg_tasks: set = set()  # keep references so background notification tasks aren't garbage-collected
 
 
 async def send_push(recipients: List[str], data: dict, idempotency_key: Optional[str] = None, _attempt: int = 0) -> None:
@@ -161,6 +162,15 @@ async def send_push(recipients: List[str], data: dict, idempotency_key: Optional
 
 
 async def _notify(recipients: List[str], data: dict, key: Optional[str]):
+    # Inbox copy first, so alerts are never missed even if the push is not delivered.
+    try:
+        now = now_iso()
+        await db.notifications.insert_many([
+            {"user_id": r, "title": data["title"], "message": data["message"], "action_url": data.get("action_url"),
+             "read": False, "created_at": now} for r in recipients
+        ])
+    except Exception as e:
+        logger.warning(f"Inbox write failed: {e}")
     for i in range(0, len(recipients), 100):
         try:
             await send_push(recipients[i:i + 100], data, idempotency_key=f"{key}-{i}" if key else None)
@@ -176,7 +186,9 @@ def notify(recipients: List[str], title: str, message: str, action_url: Optional
     data = {"title": title, "message": message}
     if action_url:
         data["action_url"] = action_url
-    asyncio.create_task(_notify(recipients, data, key))
+    task = asyncio.create_task(_notify(recipients, data, key))
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
 
 
 async def admin_ids() -> List[str]:
@@ -670,7 +682,7 @@ async def create_complaint(body: ComplaintIn, user: User = Depends(current_user)
     res = await db.complaints.insert_one(c.to_mongo())
     c.id = str(res.inserted_id)
     notify([a for a in await admin_ids() if a != user.id], f"New {c.kind} / नवीन {'तक्रार' if c.kind == 'complaint' else 'सूचना'}",
-           f"{c.subject} — from {user.name}"[:180], "/admin", f"cmp-{c.id}")
+           f"{c.subject} — from {user.name}"[:180], "/admin?tab=complaints", f"cmp-{c.id}")
     return c.out()
 
 
@@ -694,6 +706,40 @@ async def resolve_complaint(cid: str, admin: User = Depends(require_admin)):
     return {"ok": True}
 
 
+class Notification(BaseDocument):
+    user_id: str
+    title: str
+    message: str
+    action_url: Optional[str] = None
+    read: bool = False
+    created_at: str
+
+
+@api.get("/notifications")
+async def my_notifications(user: User = Depends(current_user)):
+    docs = await db.notifications.find({"user_id": user.id}).sort("created_at", -1).to_list(200)
+    return [Notification.from_mongo(d).out() for d in docs]
+
+
+@api.get("/notifications/unread-count")
+async def unread_count(user: User = Depends(current_user)):
+    return {"count": await db.notifications.count_documents({"user_id": user.id, "read": False})}
+
+
+@api.post("/notifications/read-all")
+async def read_all(user: User = Depends(current_user)):
+    await db.notifications.update_many({"user_id": user.id, "read": False}, {"$set": {"read": True}})
+    return {"ok": True}
+
+
+@api.post("/notifications/{nid}/read")
+async def read_one(nid: str, user: User = Depends(current_user)):
+    res = await db.notifications.update_one({"_id": oid(nid), "user_id": user.id}, {"$set": {"read": True}})
+    if not res.matched_count:
+        raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+
 app.include_router(api)
 
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -704,6 +750,7 @@ async def startup():
     await db.users.create_index("username", unique=True)
     await db.registrations.create_index([("type", 1), ("status", 1)])
     await db.files.create_index("storage_path")
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     uname = os.environ["ADMIN_USERNAME"].lower()
     existing = await db.users.find_one({"username": uname})
     if not existing:

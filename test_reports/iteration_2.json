@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the Notification Inbox feature. Backend: all 4 /api/notifications endpoints work. Each one returns 401 without a token. The list shows only the caller's own alerts, newest first, with no _id. Marking another user's alert, or a bad id, as read returns 404. Read-all only affects the caller. Alerts are created by the background task when: an admin posts news, an event or a notice (every user except the posting admin; links /news, /events, /events?tab=1); an admin approves or rejects an entry (sent to the owner; the reject reason is included; links /detail/{id}); a user submits an entry or a complaint (sent to admins; links /detail/{id} and /admin). Frontend: inbox_user saw the bell badge (10). Tapping the bell opened the list with 10 items and unread dots. Tapping a notice opened /events?tab=1 on the Notice Board tab. Tapping a news alert opened /news and marked it read (8 unread after). Read-all cleared every dot and hid the Read all button. The dashboard badge disappeared on return. Read state carried over between sessions. A fresh signup sees the empty state (notifications-empty) and no badge. Admin alerts open the detail screen and the Admin Panel. Regression passed: dashboard cards, the News terms dialog, the More sheet (Complaints), and the profile sheet (My Submissions, Logout). No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "notify() in server.py:188", "issue": "asyncio.create_task(...) result is not kept anywhere. Python only weakly references pending tasks, so a fan-out can be garbage-collected mid-run. Store the task in a module-level set and remove it with add_done_callback, or use FastAPI BackgroundTasks."},
+      {"endpoint": "DELETE /api/admin/posts/{pid}", "issue": "Deleting a post leaves its inbox alerts in place. Tapping one opens the list screen and the item is gone. Optionally delete alerts by post or tag them with a ref_id."},
+      {"endpoint": "GET /api/notifications", "issue": "Capped at 200 with no pagination, while unread-count counts everything. A user with more than 200 alerts can see a badge for items they cannot reach. There is no retention or cleanup."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Admin complaint alert -> /admin", "issue": "Opens the Admin Panel on the Pending tab, not the Complaints tab. The admin has to tap Complaints by hand. Consider action_url '/admin?tab=complaints' with matching param handling in admin.tsx.", "affected_testIDs": ["notification-item-<id>"]}
+    ],
+    "design_issues": [
+      {"screen": "Notifications", "issues": ["Alerts titled 'New submission' fall back to the generic bell-outline icon (iconFor only matches /news, /events, /admin and Approved/Not approved titles). A dedicated icon such as clipboard-plus would read better."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_notifications.py", "/app/backend/tests/test_sonar_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Keep a reference to the fire-and-forget tasks in notify() so they cannot be garbage-collected.",
+    "Optional: deep-link complaint alerts to the Admin > Complaints tab.",
+    "Optional: give 'New submission' alerts their own icon; consider pagination or retention for notifications."
+  ],
+  "critical_code_review_comments": [
+    "server.py:188: the task from asyncio.create_task is not retained.",
+    "notifications.tsx:44: the per-item read POST is fire-and-forget with an empty catch. If it fails, the UI shows the alert as read while the server still counts it unread. The dashboard badge re-syncs on focus.",
+    "The test DB now holds TEST_ alerts for inbox_user and admin from the test runs (cleaned-up posts left alerts behind)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_notifications.py (new)",
+    "/app/backend/tests/test_sonar_api.py (registration payload updated for the newer required-field validation; matrimony dropped from the API test because it needs 3 photos)"
+  ],
+  "success_rate": {"backend": "100% (36/36 incl. regression)", "frontend": "100% of inbox + regression flows"},
+  "seed_data_creation": "Created test_nt_* and test_ui_* users, TEST_ posts (deleted afterwards), TEST_cmp_* complaints and TEST_reg_* registrations. All inbox_user alerts are now read.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Stacked screens stay in the DOM on Expo web. Use the :visible selector, e.g. '[data-testid=\"header-back-button\"]:visible'. Run pytest with -n 0 (pytest.ini sets xdist) and EXPO_PUBLIC_BACKEND_URL (the frontend .env uses EXPO_PUBLIC_BACKEND_URL, not EXPO_BACKEND_URL). Push returns 401 from the relay because the key is a placeholder; this is expected.",
+  "rca_of_issue": ""
+}

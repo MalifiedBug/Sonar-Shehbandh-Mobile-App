@@ -24,6 +24,11 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - Frontend: handler + Android channel at module scope, warm/cold tap routing, weekly settings nudge, registration on every app open
 - PENDING: frontend/google-services.json. The file the user supplied was for package com.aistudio.societymanager.smgr; the app's package is com.emergent.sonarshehbandh.hxexh3. Once the correct file arrives, set expo.android.googleServicesFile in app.json. FIREBASE_ANDROID_API_KEY is saved in the backend secrets.
 
+## Notification Inbox (2026-06)
+- Every alert is stored per user in `notifications`, written before the push is sent, so nothing is lost if a push fails
+- Dashboard bell with unread badge; /notifications screen with tap-to-open, unread dots, Read all
+- Complaint alerts open Admin → Complaints tab
+
 ## Backlog
 - P1: Remaining More modules (Flat Allocation, Maintenance, Minutes, Audits, Vendors, Assets), Wings & Vehicles
 - P1: Biodata PDF share, matrimony renewal reminder, edit after submit

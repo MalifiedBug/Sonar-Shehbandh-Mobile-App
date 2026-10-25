@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
@@ -21,7 +21,8 @@ const TYPES = [
 export default function Admin() {
   const s = useStyles();
   const { user } = useAuth();
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Pending");
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<(typeof TABS)[number]>(tabParam === "complaints" ? "Complaints" : "Pending");
   if (user?.role !== "admin") return (<View style={s.root}><Header title="Admin Panel" /><Empty text="Admins only / फक्त प्रशासक" icon="lock-outline" /></View>);
   return (
     <View style={s.root}>
