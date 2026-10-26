@@ -23,6 +23,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 import database as pg  # noqa: E402
 import storage  # noqa: E402
+import payments  # noqa: E402
 
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
@@ -81,6 +82,8 @@ class Registration(BaseDocument):
     approved_at: Optional[str] = None
     expires_at: Optional[str] = None
     reject_reason: Optional[str] = None
+    featured: bool = False
+    locked: bool = False
 
 
 class Post(BaseDocument):
@@ -448,7 +451,20 @@ async def list_registrations(type: str, q: str = "", sub_caste: str = "", catego
         conds.append("(" + " or ".join(f"{f} ilike ${n}" for f in fields) + ")")
     rows = await pg.fetch(f"select * from sonar.registrations where {' and '.join(conds)} "
                           "order by approved_at desc nulls last limit 500", *args)
-    return [reg_out(Registration.from_row(r)) for r in rows]
+    regs = [Registration.from_row(r) for r in rows]
+    # Paid plans: Business Pro+ features businesses, Samaj Patron features matrimony profiles.
+    need = {"business": 2, "matrimony": 3}.get(type)
+    if need:
+        ranks = await payments.ranks_for([r.owner_id for r in regs])
+        for r in regs:
+            r.featured = ranks.get(r.owner_id, 0) >= need
+        regs.sort(key=lambda r: not r.featured)
+    if type == "matrimony" and user.role != "admin" and await payments.active_rank(user.id) < 1:
+        for r in regs:
+            if r.owner_id != user.id:
+                r.data = {k: v for k, v in r.data.items() if k in MATRIMONY_PUBLIC_KEYS}
+                r.locked = True
+    return [reg_out(r) for r in regs]
 
 
 @api.get("/registrations/mine")
@@ -465,7 +481,15 @@ async def get_registration(rid: str, user: User = Depends(current_user)):
     reg = Registration.from_row(row)
     if reg.status != "approved" and reg.owner_id != user.id and user.role != "admin":
         raise HTTPException(404, "Not found")
+    # Full matrimony biodata needs Matrimony Plus or higher (owner and admins always see everything).
+    if reg.type == "matrimony" and reg.owner_id != user.id and user.role != "admin" and await payments.active_rank(user.id) < 1:
+        reg.data = {k: v for k, v in reg.data.items() if k in MATRIMONY_PUBLIC_KEYS}
+        reg.locked = True
     return reg_out(reg)
+
+
+MATRIMONY_PUBLIC_KEYS = {"category", "remarriage_gender", "full_name", "sub_caste", "dob", "height", "complexion",
+                         "rashi", "qualification", "occupation_type", "work_location"}
 
 
 class RejectIn(BaseModel):
@@ -577,6 +601,7 @@ async def get_post(pid: str, user: User = Depends(current_user)):
 
 
 # ---------------------------------------------------------------- matrimony shortlist
+FREE_SHORTLIST_LIMIT = 5
 @api.get("/shortlist")
 async def my_shortlist(user: User = Depends(current_user)):
     rows = await pg.fetch("select registration_id from sonar.shortlists where user_id = $1 order by created_at desc", user.id)
@@ -590,6 +615,9 @@ async def toggle_shortlist(rid: str, user: User = Depends(current_user)):
     ok = await pg.fetchval("select 1 from sonar.registrations where id = $1 and type = 'matrimony' and status = 'approved'", rid)
     if not ok:
         raise HTTPException(404, "Profile not found")
+    if await payments.active_rank(user.id) < 1 and user.role != "admin":
+        if await pg.fetchval("select count(*) from sonar.shortlists where user_id = $1", user.id) >= FREE_SHORTLIST_LIMIT:
+            raise HTTPException(402, f"Free members can shortlist up to {FREE_SHORTLIST_LIMIT} profiles. Get Matrimony Plus for unlimited.")
     await pg.execute("insert into sonar.shortlists (user_id, registration_id, created_at) values ($1, $2, $3) on conflict do nothing",
                      user.id, rid, pg.now())
     return {"shortlisted": True}
@@ -755,6 +783,7 @@ async def read_one(nid: str, user: User = Depends(current_user)):
 
 
 app.include_router(api)
+app.include_router(payments.make_router(current_user))
 
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 

@@ -63,6 +63,7 @@ export default function Matrimony() {
     } catch (e: any) {
       setShort((prev) => { const n = new Set(prev); if (was) n.add(id); else n.delete(id); return n; });
       toast(e?.message ?? "Failed", "error");
+      if (e?.status === 402) router.push("/plans");
     }
   };
 
@@ -126,6 +127,7 @@ export default function Matrimony() {
                     <Icon name={liked ? "heart" : "heart-outline"} size={20} color={colors.white} />
                   </Pressable>
                   <View style={s.catTag}><Text style={s.catTagText}>{d.category === "bride" ? "वधू Bride" : d.category === "groom" ? "वर Groom" : "पुनर्विवाह"}</Text></View>
+                  {(item as any).featured ? <View style={s.featTag} testID={`matrimony-featured-${item.id}`}><Text style={s.catTagText}>★ Featured</Text></View> : null}
                 </View>
                 <View style={{ padding: 10, gap: 2 }}>
                   <Text style={s.name} numberOfLines={1}>{item.title}</Text>
@@ -162,6 +164,7 @@ const useStyles = makeStyles((c) => ({
   heart: { position: "absolute", top: 8, right: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: c.overlay, alignItems: "center", justifyContent: "center" },
   catTag: { position: "absolute", left: 8, bottom: 8, backgroundColor: c.brand, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   catTagText: { color: c.white, fontSize: 11, fontWeight: "800" },
+  featTag: { position: "absolute", left: 8, top: 8, backgroundColor: c.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   name: { fontSize: 14, fontWeight: "800", color: c.onSurface },
   line: { fontSize: 12, color: c.onSurfaceTertiary },
   caste: { fontSize: 11, color: c.brand, fontWeight: "700", marginTop: 2 },

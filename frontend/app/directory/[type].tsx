@@ -92,7 +92,8 @@ export default function Directory() {
                 <View style={[s.avatar, s.avatarEmpty]}><Icon name="account" size={28} color={colors.borderStrong} /></View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={s.title} numberOfLines={1}>{item.title}</Text>
+                <Text style={s.title} numberOfLines={1}>{(item as any).featured ? "★ " : ""}{item.title}</Text>
+                {(item as any).featured ? <Text style={s.featured} testID={`directory-featured-${item.id}`}>FEATURED</Text> : null}
                 {def.subtitle(item.data) ? <Text style={s.sub} numberOfLines={1}>{def.subtitle(item.data)}</Text> : null}
                 {item.sub_caste ? <Text style={s.caste} numberOfLines={1}>{englishPart(item.sub_caste)}</Text> : null}
               </View>
@@ -122,4 +123,5 @@ const useStyles = makeStyles((c) => ({
   title: { fontSize: 15, fontWeight: "800", color: c.onSurface },
   sub: { fontSize: 13, color: c.onSurfaceTertiary, marginTop: 2 },
   caste: { fontSize: 12, color: c.brand, marginTop: 2, fontWeight: "600" },
+  featured: { alignSelf: "flex-start", marginTop: 2, fontSize: 10, fontWeight: "800", color: c.white, backgroundColor: c.gold, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
 }));

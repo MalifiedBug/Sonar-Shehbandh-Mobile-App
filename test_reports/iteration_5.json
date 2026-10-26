@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 5 tested Cashfree payments and plans, backend and frontend. Backend: 15/16 new tests passed, 1 skipped (it needs a paid order id passed in by env; the same check was done by hand). The full regression suite gives 76 passed, 1 failed, 1 skipped; the only failure is the new list-endpoint leak test. I completed a real SANDBOX payment end to end (Net Banking simulator, OTP 111000, SUCCESS): the return page said 'Payment successful', GET /api/payments/{id} returned PAID, and the silver plan's expires_at is +365d. Calling the status endpoint 3 times, the return page, and a webhook with a valid signature did not extend the plan (idempotent). CRITICAL: GET /api/registrations?type=matrimony returns the FULL matrimony biodata (father_name, relatives, expectations, ...) to free users, so the paywall is only enforced on the detail endpoint and can be bypassed. Frontend: the dashboard Plans link, the plan cards, prices and Buy buttons, Buy opening the Cashfree sandbox checkout with the 'Waiting for payment confirmation' banner, the locked detail card with View Plans going to /plans, and the featured badges on the business directory and matrimony cards all work. Deprecated packages detected: none.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/registrations?type=matrimony", "issue": "Paywall bypass: the list endpoint returns the full r.data for every approved matrimony profile to any logged-in free user, including keys that GET /api/registrations/{id} hides (father_name, relatives, expectations...). Verified with a fresh user who has no plan. Fix: in list_registrations (server.py ~L452-462), when type == 'matrimony' and the viewer is not admin and has active_rank < 1, reduce data to MATRIMONY_PUBLIC_KEYS for profiles the viewer does not own (and set locked=true). Ideally do the same check for any other endpoint that returns matrimony data.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/payments/webhook", "issue": "A correctly signed body that is not the expected shape ('[]', {\"data\":null}, {\"data\":{\"order\":null}}) gives 500 (AttributeError: .get on None or a list). Only reachable with a valid signature; return 400 or 200 instead."},
+      {"endpoint": "POST /api/payments/order + sync_order", "issue": "The API lets a platinum (or gold) user buy a cheaper plan. sync_order keeps the higher plan and adds 365 days, so a Patron could renew platinum for ₹299. The UI blocks this (owned plans are disabled), but the server does not. Reject orders for a plan with rank < the current active rank, or extend at the purchased tier only."},
+      {"endpoint": "GET /api/payments/checkout/{order_id}", "issue": "Opening the same checkout page a second time (same payment_session_id) showed Cashfree's 'OH NO! Please try again after sometime' screen. The app creates a new order on every Buy tap, so this is low impact."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "matrimony", "issues": ["When a free user hits the 402 shortlist limit, only an error toast is shown. Add a 'View Plans' action or route to /plans to help conversion."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_payments.py", "/app/backend/tests/manual_paid_checks.py", "/app/backend/tests/manual_webhook_edge.py", "/app/backend/tests/seed_iter5_ui.py", "/app/backend/tests/cleanup_iter5.py", "/app/test_reports/pytest/pytest_iter5.xml"],
+  "action_items": [
+    "CRITICAL: strip locked biodata in GET /api/registrations?type=matrimony for free non-owner non-admin viewers (same MATRIMONY_PUBLIC_KEYS filter + locked flag as the detail endpoint). Test: tests/test_payments.py::TestGating::test_list_endpoint_does_not_leak_full_biodata",
+    "Webhook: handle a signed body that is not a JSON object or has null data/order gracefully (no 500)",
+    "Server-side: reject (400) orders for a plan ranked below the user's active plan, or don't carry the higher tier over when extending",
+    "Optional UX: show a 'View Plans' CTA when the shortlist returns 402"
+  ],
+  "critical_code_review_comments": [
+    "payments.py: prices are server-only and the amount is checked against Cashfree's order_amount before activation. Activation is atomic and runs once (update ... where status <> 'PAID' returning *). Webhook HMAC uses compare_digest. Good.",
+    "sync_order: the 'from datetime import datetime' import is inside the function; move it to the top of the module.",
+    "customer_phone falls back to 9999999999 when the user has no member registration. This is fine in sandbox, but in production use the real phone or ask for it.",
+    "Upgrade silver->gold starts from the silver expiry date (no proration). This is generous but OK; make sure it is the intended business rule."
+  ],
+  "updated_files": ["/app/backend/tests/test_payments.py (new)", "/app/backend/tests/manual_paid_checks.py (new)", "/app/backend/tests/manual_webhook_edge.py (new)", "/app/backend/tests/seed_iter5_ui.py (new)", "/app/backend/tests/cleanup_iter5.py (new)"],
+  "success_rate": {"backend": "94% (15/16 new; regression 76/77, 1 skipped)", "frontend": "100% of requested UI flows"},
+  "seed_data_creation": "Test users test_* (signup), TEST_ matrimony/business registrations and subscriptions rows. Registrations and ALL test_* subscriptions were removed by tests/cleanup_iter5.py. The sonar.payments rows for the sandbox orders (including 1 PAID order sonar_silver_6b7466746ecc41c7) were kept as payment history.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: export EXPO_PUBLIC_BACKEND_URL=...; pytest tests/ -n 0. Sandbox payment via browser: open checkout_url -> Net Banking -> State Bank Of India -> 'Proceed to Pay' -> simulator: fill input[placeholder*='OTP']=111000, click 'SUCCESS', then click the last button (selector button:has-text('Submit') with force=True) -> redirects to /api/payments/return. Each browser session needs a NEW order (reopening a session fails). The UPI ID field isn't shown on the mobile checkout (QR only), so use Net Banking. tests/test_payments.py::TestIdempotency needs env PAID_ORDER_ID and PAID_TOKEN, otherwise it is skipped.",
+  "rca_of_issue": "Paywall leak: list_registrations (server.py L436-462) builds reg_out(r) from the full row data with no plan check. The gating exists only in get_registration (L479-482). Repro: a fresh user calls GET /api/registrations?type=matrimony and sees data.father_name. Mitigation: apply the MATRIMONY_PUBLIC_KEYS filter in the list endpoint (look up the viewer's active_rank once per request)."
+}

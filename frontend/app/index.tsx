@@ -25,6 +25,7 @@ const CARDS: Card[] = [
 ];
 
 const LINKS = [
+  { label: "Plans ★", icon: "crown-outline", route: "/plans", testID: "dash-link-plans" },
   { label: "Members", icon: "account-multiple", route: "/directory/member", testID: "dash-link-members" },
   { label: "Businesses", icon: "storefront-outline", route: "/directory/business", testID: "dash-link-business" },
   { label: "Social Workers", icon: "hand-heart-outline", route: "/directory/social_worker", testID: "dash-link-social" },

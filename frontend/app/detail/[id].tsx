@@ -56,6 +56,13 @@ export default function Detail() {
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} testID="detail-screen">
             {data.status === "rejected" && data.reject_reason ? <Text style={s.reason}>Reason: {data.reject_reason}</Text> : null}
             <RegistrationView reg={data} />
+            {(data as any).locked ? (
+              <View style={s.lock} testID="detail-locked-card">
+                <Text style={s.lockTitle}>🔒 Full biodata is for Matrimony Plus members</Text>
+                <Text style={s.lockText}>See family background, relatives and partner expectations of every profile. / संपूर्ण बायोडाटा पाहण्यासाठी योजना घ्या.</Text>
+                <Btn label="View Plans / योजना पहा" variant="maroon" onPress={() => router.push("/plans")} testID="detail-unlock-button" />
+              </View>
+            ) : null}
           </ScrollView>
           {isAdmin ? (
             <View style={[s.footer, { paddingBottom: insets.bottom + 12 }]}>
@@ -84,4 +91,7 @@ const useStyles = makeStyles((c) => ({
   reason: { backgroundColor: c.errorSoft, color: c.error, padding: 12, borderRadius: 12, marginBottom: 12, fontSize: 13 },
   input: { minHeight: 90, borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12, fontSize: 15, color: c.onSurface, backgroundColor: c.white, marginBottom: 12, textAlignVertical: "top" },
   sheetText: { fontSize: 14, color: c.onSurfaceSecondary, marginBottom: 12 },
+  lock: { marginTop: 16, padding: 16, borderRadius: 16, backgroundColor: c.goldSoft, borderWidth: 1, borderColor: c.gold, gap: 8 },
+  lockTitle: { fontSize: 15, fontWeight: "800", color: c.brand },
+  lockText: { fontSize: 13, color: c.onSurfaceSecondary, lineHeight: 19 },
 }));

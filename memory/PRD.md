@@ -44,7 +44,15 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - Matrimony: browse screen /matrimony with profile grid, filters, search, shortlist (sonar.shortlists, /api/shortlist), and an Add Profile button
 - omkarlolge made admin through EXTRA_ADMIN_USERNAMES (applied on startup)
 
+## Payments — Cashfree (2026-06)
+- 3 yearly plans, priced on the server only (backend/payments.py PLANS): Matrimony Plus ₹299 (full biodata + unlimited shortlist), Business Pro ₹999 (+ featured business), Samaj Patron ₹2499 (+ featured matrimony profile, patron badge)
+- Flow: POST /api/payments/order → backend-hosted checkout page (Cashfree JS v3) opened with expo-web-browser → return page + webhook POST /api/payments/webhook (signature checked) → plan granted only after a server-side Get Order says PAID, exactly once
+- Tables sonar.payments and sonar.subscriptions (migration 003). Free members can shortlist up to 5 profiles; without a plan, matrimony detail shows only basic fields (locked)
+- Sandbox mode (CASHFREE_BASE_URL, CASHFREE_MODE). Go-live: production keys + api.cashfree.com + domain whitelisting + webhook URL in the Cashfree dashboard
+
 ## Backlog
 - P1: Remaining More modules (Flat Allocation, Maintenance, Minutes, Audits, Vendors, Assets), Wings & Vehicles
 - P1: Biodata PDF share, matrimony renewal reminder, edit after submit
 - P2: AI news digests, multi-admin roles, advanced matrimony filters, password reset
+- 2026-06: Fixed AndroidImportance lint error in app/_layout.tsx (named import).
+- Backlog (user ask): Plan upgrade/downgrade with prorated difference charge or refund.
