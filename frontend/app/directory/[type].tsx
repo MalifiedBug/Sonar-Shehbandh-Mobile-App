@@ -46,7 +46,7 @@ export default function Directory() {
 
   return (
     <View style={s.root}>
-      <Header title={def.dirTitle} subtitle={`${data?.length ?? 0} approved listings / मंजूर नोंदी`} />
+      <Header title={def.dirTitle} subtitle={`${data?.length ?? 0} approved ${data?.length === 1 ? "listing" : "listings"} / मंजूर नोंदी`} />
       <View style={s.ctaWrap}>
         <Pressable style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]} onPress={() => setTerms(type as TermsKind)} testID="directory-register-button">
           <Icon name={type === "social_worker" ? "account-plus" : type === "business" ? "store-plus" : "plus-circle"} size={20} color={colors.white} />
@@ -83,7 +83,7 @@ export default function Directory() {
           keyExtractor={(r) => r.id}
           contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 10 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={colors.brand} />}
-          ListEmptyComponent={<Empty text={error ?? "No approved listings yet. Be the first to register! / अद्याप नोंदी नाहीत"} testID="directory-empty" />}
+          ListEmptyComponent={<Empty text={error ?? (dq || caste || cat ? "No matches found. Try a different search. / जुळणारे निकाल नाहीत" : "No approved listings yet. Be the first to register! / अद्याप नोंदी नाहीत")} testID="directory-empty" />}
           renderItem={({ item }) => (
             <Pressable style={({ pressed }) => [s.item, pressed && { opacity: 0.85 }]} onPress={() => router.push(`/detail/${item.id}` as any)} testID={`directory-item-${item.id}`}>
               {photoKey && item.photos?.[photoKey] ? (

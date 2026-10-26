@@ -149,7 +149,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [msg, setMsg] = useState<{ text: string; kind: ToastKind } | null>(null);
-  const anim = useRef(new Animated.Value(0)).current;
+  const [anim] = useState(() => new Animated.Value(0));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const show = useCallback((text: string, kind: ToastKind = "success") => {
     setMsg({ text, kind });

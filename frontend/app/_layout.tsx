@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { ActivityIndicator, Linking, LogBox, Platform, StyleSheet, Text, View } from "react-native";
-import * as Notifications from "expo-notifications";
-import { AndroidImportance } from "expo-notifications";
+import type { NotificationResponse } from "expo-notifications";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -16,11 +15,12 @@ import { AuthProvider, useAuth } from "@/src/auth";
 import { ToastProvider, Btn, Sheet } from "@/src/components/ui";
 import { colors } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
+import { Notifications } from "@/src/notifications";
 
 LogBox.ignoreAllLogs(true);
 
-// Push: foreground display handler (module scope, native only)
-if (Platform.OS !== "web") {
+// Push: foreground display handler (module scope, real builds only)
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -33,15 +33,15 @@ if (Platform.OS !== "web") {
 }
 
 // Push: Android channel must exist before any push arrives (module scope)
-if (Platform.OS === "android") {
+if (Notifications && Platform.OS === "android") {
   Notifications.setNotificationChannelAsync("default", {
     name: "Default",
-    importance: AndroidImportance.MAX,
+    importance: Notifications.AndroidImportance.MAX,
     sound: "default",
   });
 }
 
-const openFromNotification = (router: ReturnType<typeof useRouter>, response: Notifications.NotificationResponse | null) => {
+const openFromNotification = (router: ReturnType<typeof useRouter>, response: NotificationResponse | null) => {
   if (!response) return;
   const data: any = response.notification.request.content.data || {};
   const url: string | undefined = data.deeplink || data.action_url;
@@ -56,14 +56,15 @@ function PushHandlers() {
   const [nudge, setNudge] = useState(false);
 
   useEffect(() => {
-    if (Platform.OS === "web" || !user) return;
+    const N = Notifications;
+    if (!N || !user) return;
     // Warm tap
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => openFromNotification(router, r));
+    const sub = N.addNotificationResponseReceivedListener((r) => openFromNotification(router, r));
     // Cold-start tap
-    Notifications.getLastNotificationResponseAsync().then((r) => openFromNotification(router, r));
+    N.getLastNotificationResponseAsync().then((r) => openFromNotification(router, r));
     // Weekly nudge if notifications are permanently denied
     (async () => {
-      const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+      const { status, canAskAgain } = await N.getPermissionsAsync();
       if (status !== "denied" || canAskAgain) return;
       const last = await storage.getItem<string | null>("pushNudgeAt", null);
       if (last && Date.now() - Number(last) <= 7 * 24 * 60 * 60 * 1000) return;
@@ -103,7 +104,8 @@ function Gate() {
     else if (user && onLogin) router.replace("/");
   }, [user, loading, segments, router]);
 
-  if (loading) {
+  const redirecting = !loading && ((!user && segments[0] !== "login") || (user && segments[0] === "login"));
+  if (loading || redirecting) {
     return (
       <View style={[styles.root, styles.center]}>
         <ActivityIndicator color={colors.brand} size="large" />

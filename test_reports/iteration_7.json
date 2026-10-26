@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 7 retested the iteration 6 fixes and ran a smoke test. Frontend only, web preview at 375x667. All fixes pass. (1) useLoad race: on Admin Panel, with status=pending delayed 3s, tapping Approved, Pending, Approved showed exactly the 15 approved items and none of the pending ones. With status=approved delayed 3s, tapping Approved then Rejected showed exactly the 13 rejected items. Fast switching of type chips ended on the correct Pending/All list. A delayed directory search was also overwritten correctly by the newer search. (2) Gate: on a fresh load without login, the app redirected to /login, the dashboard never appeared (checked with a MutationObserver), and no /api request fired (no 401 on unread-count). (3) auth.tsx: the session survived a reload; with /auth/me aborted as a network error the user stayed on the dashboard using the cached profile; a bad token (401) cleared both storage keys and went to /login; logout cleared auth_token and auth_user and stayed on /login after reload. (4) Directory subtitle shows '1 approved listing' and '15 approved listings'. An empty search or sub-caste filter shows 'No matches found...'. With no filter, an empty directory still shows 'No approved listings yet...'. (5) The Business form label reads 'MSME Udyam Registration No. (or Shop Act below)'. (6) Smoke as admin: dashboard, matrimony, plans and notifications loaded with no console errors, page errors or 4xx/5xx responses. inbox_user login works. Deprecated packages detected: none.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "useLoad (src/api.ts:61-77)", "issues": ["Low priority: loading is not set back to true when deps change, so the old list stays on screen with no spinner while a new filter loads. The final data is now always correct."]},
+      {"screen": "Directory /directory/member (production readiness)", "issues": ["Most of the 15 approved member listings are leftover test data (TEST_reg_*, TEST_member_*). The admin notifications inbox is also full of TEST_ entries (162 unread). Clean these up before going live."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: in useLoad, call setLoading(true) when depKey changes, or show a small inline indicator, so filter changes give visual feedback.",
+    "Before production: delete the leftover TEST_* registrations, notifications and complaints from the database."
+  ],
+  "critical_code_review_comments": [
+    "useLoad's request counter guards setData, setError, setLoading and setRefreshing correctly.",
+    "Gate's redirecting flag mirrors the effect's conditions, so Stack never mounts for protected routes while user is null.",
+    "auth.tsx clears the token only on ApiError 401 and falls back to the cached auth_user otherwise. If there is no cached user, user stays null and the stored token is kept, so the user reaches /login without being logged out for good. This is acceptable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not retested (no backend changes)", "frontend": "100% (all 6 retest items passed)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To reproduce the race, add a page.route delay on status=pending, then click admin-status-approved, pending, approved. Read auth state from localStorage keys auth_token and auth_user on web. Use dispatch_event('click') for profile-logout-button inside the sheet. The browser tool rewrites f-strings in screenshot paths, so use plain string paths."
+}

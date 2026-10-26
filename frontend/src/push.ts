@@ -1,12 +1,12 @@
 import { Platform } from "react-native";
-import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import { api } from "@/src/api";
+import { Notifications } from "@/src/notifications";
 
 // Registers this device for Emergent managed push. Safe to call on every app open (tokens rotate).
 // Never throws and never blocks the app if permission is denied.
 export async function registerForPush(userId: string) {
-  if (Platform.OS === "web" || !Device.isDevice) return;
+  if (!Notifications || !Device.isDevice) return;
   try {
     const current = await Notifications.getPermissionsAsync();
     let status = current.status;

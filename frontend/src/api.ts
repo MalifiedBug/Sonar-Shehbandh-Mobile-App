@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 
@@ -51,18 +51,28 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fnRef = useRef(fn);
-  fnRef.current = fn;
+  useEffect(() => {
+    fnRef.current = fn;
+  });
+  const depKey = JSON.stringify(deps);
+
+  const reqId = useRef(0);
 
   const run = useCallback(async (isRefresh = false) => {
+    const id = ++reqId.current;
     if (isRefresh) setRefreshing(true);
     try {
       setError(null);
-      setData(await fnRef.current());
+      const result = await fnRef.current();
+      // Ignore responses from older requests (e.g. a filter changed meanwhile).
+      if (id === reqId.current) setData(result);
     } catch (e: any) {
-      setError(e?.message ?? "Something went wrong");
+      if (id === reqId.current) setError(e?.message ?? "Something went wrong");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (id === reqId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -70,7 +80,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
     useCallback(() => {
       run();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [run, ...deps]),
+    }, [run, depKey]),
   );
 
   return { data, setData, loading, refreshing, error, reload: () => run(true) };

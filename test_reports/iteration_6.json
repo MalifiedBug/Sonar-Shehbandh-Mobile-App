@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 6 retested the app after the crash and lint fixes. Backend: 79 passed and 1 skipped (expected) across test_payments, test_notifications, test_sonar_api, test_iter4_features and the new test_iter6_regression. Frontend web preview at 375x667, run as admin and as inbox_user: the app loads with no page errors or red screen. Verified login, wrong-password error, signup of a new user, session kept after reload, logout, and the non-admin /admin guard. Toast shows and hides after about 3s. All 17 screens render with data. Member, Social Worker and Business forms submit end to end (photo upload on web, PIN lookup auto-fill, consent, toast, redirect to /mine). Admin approve and remove work. Focus reload works: directory count went 15 to 16 after approval, the admin list refreshed after remove, and the bell badge cleared after read-all. Directory search and sub-caste chips filter correctly. One real bug: useLoad has no stale-response guard, so a slow older response overwrites newer data (seen once with no throttling, then reproduced reliably). Smaller issues: the dashboard flashes before the login redirect and sends an unauthenticated request that returns 401; a network error on /auth/me logs the user out. Deprecated packages detected: none (expo-av, expo-barcode-scanner and expo-background-fetch are not used). expo-notifications is only loaded through src/notifications.ts; the static import in _layout.tsx is type-only, so it is removed at build time.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "useLoad (src/api.ts:59-70): out-of-order responses", "issue": "run() always calls setData with whatever resolves, so an older slow request can overwrite a newer one. Reproduced on Admin Panel: the Approved chip was active but the list showed Pending items. This happened once naturally, then reliably with a 3s delay on status=pending. It affects every screen with deps or focus refetch: admin [type,status], news [kind,level], directory [type,dq,caste,cat], matrimony [dq,caste,cat], detail/post [id]. Also, loading is never set back to true when deps change, so the old list stays on screen with no spinner while the new filter loads.", "testID": "admin-status-approved", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Cold start, not logged in (_layout.tsx Gate:95-120)", "issue": "Gate renders <Stack/> while user is null, and the redirect to /login only runs in an effect. So the Dashboard briefly shows 'Namaskar, ' with no name, and its useLoad fires GET /api/notifications/unread-count without a token, which returns 401 (seen in the console on every fresh load). Fix: render a spinner or null when !user && segments[0] !== 'login', or use Stack.Protected guard.", "affected_testIDs": ["dashboard-greeting", "dashboard-bell-button"]},
+      {"flow": "App open with a flaky network (src/auth.tsx:27-38)", "issue": "Any /auth/me failure, including a network error or timeout, removes the stored token, so users get logged out when they open the app offline. Only clear the token when e.status === 401.", "affected_testIDs": ["login-submit-button"]}
+    ],
+    "design_issues": [
+      {"screen": "Global toast (ui.tsx:165-172)", "issues": ["The toast sits at insets.top+8 and fully covers the screen Header (title and back arrow) for 2.8s after every save, approve or remove. Taps still pass through because pointerEvents is none."]},
+      {"screen": "Directory /directory/[type]", "issues": ["A search with no match shows 'No approved listings yet. Be the first to register!', which is misleading. Show 'No results for <q>' instead.", "Subtitle says '1 approved listings'. Pluralise it."]},
+      {"screen": "Business registration", "issues": ["When both Udyam and Shop Act are empty, the footer hint says 'Please fix: MSME Udyam Registration No.', but the field is not marked * and the hint does not say that either number is accepted."]}
+    ],
+    "react_native_issues": [
+      {"component": "expo package versions", "issue": "npx expo install --check reports patch mismatches: expo 58.0.17 (expected ~58.0.19), expo-font 58.0.9 (~58.0.10), expo-image 58.0.16 (~58.0.17), expo-router 58.0.25 (~58.0.26). Reference: /app/frontend/package.json"},
+      {"component": "LogBox.ignoreAllLogs", "issue": "LogBox.ignoreAllLogs(true) hides all dev warnings, so runtime problems in Expo Go are hard to spot. Reference: /app/frontend/app/_layout.tsx:20"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_regression.py",
+    "/app/backend/tests/test_payments.py",
+    "/app/backend/tests/test_notifications.py",
+    "/app/backend/tests/test_sonar_api.py",
+    "/app/backend/tests/test_iter4_features.py",
+    "/app/test_reports/pytest/iter6_results.xml",
+    "/app/test_reports/pytest/iter6_regression.xml"
+  ],
+  "action_items": [
+    "HIGH: in useLoad add a request sequence guard: const seq = useRef(0); in run: const id = ++seq.current; const r = await fnRef.current(); if (id === seq.current) setData(r) (apply the same check to setError, setLoading and setRefreshing). Optionally setLoading(true) when depKey changes.",
+    "Gate: do not render <Stack/> for protected routes while user is null. Render a spinner until router.replace('/login') runs, or use Stack.Protected, so there is no Dashboard flash and no 401 on unread-count.",
+    "auth.tsx: only clear the stored token on a 401 from /auth/me, not on network errors.",
+    "Run npx expo install --fix to align the patch versions of expo, expo-font, expo-image and expo-router.",
+    "Minor UX: move the toast below the header or make it shorter; show a 'no search results' empty state in the directory and matrimony screens; clarify the Udyam/Shop Act either-or hint."
+  ],
+  "critical_code_review_comments": [
+    "src/notifications.ts is correct: it skips expo-notifications in Expo Go (StoreClient) and on web. The _layout.tsx import is type-only, so it is erased.",
+    "ui.tsx: Animated.Value in useState(() => new Animated.Value(0)) is fine, and the toast was verified working.",
+    "useLoad: the fnRef effect is declared before useFocusEffect, so the ref is updated before the refetch runs. Focus refetch was verified working. The only problem is the missing stale-response guard.",
+    "photo.tsx asks for media-library permission before launchImageLibraryAsync. The system picker does not need it on iOS 14+ or Android 13+, so this is extra friction (optional)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter6_regression.py"],
+  "success_rate": {"backend": "100% (79 passed, 1 skipped as expected)", "frontend": "~94% (all flows work; 1 race bug and 2 auth/gate integration issues)"},
+  "seed_data_creation": "Created user test_iter6_6040 via signup (no delete endpoint, so it was left in place). All registrations created by the tests (Testiter Member, Testsix Worker, Testsix Jewellers, TEST_iter6_*) were deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "pytest.ini uses xdist (-n), so do not pass -p no:xdist. Set EXPO_PUBLIC_BACKEND_URL before running pytest. Dashboard cards for news, members and others open a terms dialog first: click terms-accept-button with dispatch_event. Sheets animate, so wait about 1s and use dispatch_event('click') on options. Several Stack screens stay mounted, so use '[data-testid=header-back-button]:visible'. On web, upload photos with page.expect_file_chooser on photo-<key>. To reproduce the race, route-delay status=pending by 3s, then click approved, pending, approved.",
+  "rca_of_issue": "Race: useLoad.run() has no cancellation or sequencing. useFocusEffect re-runs run() whenever depKey changes, and every invocation writes its result to state when it resolves. If responses arrive out of order, the last one to resolve wins, not the latest request. Reproduction: Admin Panel, delay the pending request by 3s, tap Approved, then Pending, then Approved. The list ends up showing Pending items while the Approved chip is active. Mitigation: a sequence ref (or AbortController) so only the latest request may set state."
+}

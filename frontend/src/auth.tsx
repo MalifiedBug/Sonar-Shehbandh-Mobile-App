@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { storage } from "@/src/utils/storage";
-import { api, setToken } from "@/src/api";
+import { api, ApiError, setToken } from "@/src/api";
 import { registerForPush } from "@/src/push";
 
 export type User = { id: string; username: string; name: string; role: "user" | "admin" };
@@ -15,6 +15,7 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx>(null as never);
 const KEY = "auth_token";
+const USER_KEY = "auth_user";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -30,10 +31,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (t) {
         setToken(t);
         try {
-          setUser(await api<User>("/auth/me"));
-        } catch {
-          setToken(null);
-          await storage.secureRemove(KEY);
+          const me = await api<User>("/auth/me");
+          setUser(me);
+          await storage.setItem(USER_KEY, JSON.stringify(me));
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            setToken(null);
+            await storage.secureRemove(KEY);
+            await storage.removeItem(USER_KEY);
+          } else {
+            // Offline or server hiccup: keep the session with the last known profile.
+            const cached = await storage.getItem<string | null>(USER_KEY, null);
+            setUser(cached ? (JSON.parse(cached) as User) : null);
+          }
         }
       }
       setLoading(false);
@@ -43,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const accept = async (res: { token: string; user: User }) => {
     setToken(res.token);
     await storage.secureSet(KEY, res.token);
+    await storage.setItem(USER_KEY, JSON.stringify(res.user));
     setUser(res.user);
   };
 
@@ -55,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setToken(null);
     await storage.secureRemove(KEY);
+    await storage.removeItem(USER_KEY);
     setUser(null);
   };
 

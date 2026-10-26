@@ -56,3 +56,5 @@ Bilingual (English / मराठी) Sonar Samaj community portal under the hea
 - P2: AI news digests, multi-admin roles, advanced matrimony filters, password reset
 - 2026-06: Fixed AndroidImportance lint error in app/_layout.tsx (named import).
 - Backlog (user ask): Plan upgrade/downgrade with prorated difference charge or refund.
+- 2026-06: Expo Go crash fixed (expo-notifications lazily loaded via src/notifications.ts, skipped in Expo Go/web). Fixed lint/TS errors, useLoad stale-response race, login-screen flash, offline logout. Tested iterations 6-7 pass.
+- Open: deploy health check flags Supabase/Postgres as unsupported stack for Emergent deploy; no in-app account deletion (Apple review); test data (TEST_*) to clean before launch; google-services.json pending.

@@ -294,7 +294,7 @@ const business: FormDef = {
         { key: "landmark", label: "Landmark / मुख्य खूण", type: "text", translit: true },
         pin({ city_district: "district" }),
         { key: "city_district", label: "City / District / शहर/जिल्हा", type: "text", required: true, translit: true },
-        { key: "udyam_no", label: "MSME Udyam Registration No. / उद्यम नोंदणी क्र.", type: "text" },
+        { key: "udyam_no", label: "MSME Udyam Registration No. (or Shop Act below) / उद्यम नोंदणी क्र.", type: "text" },
         { key: "shop_act_no", label: "Shop Act License No. / गुमास्ता परवाना क्र.", type: "text" },
         { key: "gst", label: "GST Number / जी.एस.टी. क्रमांक", type: "gst" },
         { key: "bis", label: "BIS Hallmarking Certified? / हॉलमार्क परवाना आहे का?", type: "select", options: C.BIS },
