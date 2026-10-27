@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 8: tested the security audit fixes on backend and frontend. Backend: 92 tests across the new test_iter8_security.py and the regression suites (payments, notifications, sonar_api, iter6). 91 passed, 1 skipped (existing payments idempotency skip) and 1 failed. The failure is a real lockout bug: after the 15-minute lock ends, one more wrong password locks the account again. Everything else works. Free users do not get business phone1/phone2/whatsapp/email and get locked=true, in both the list and the detail call. Owner, admin and plan users see the contacts. A free user's matrimony record has only the portrait. Full and half photos return 403 for free users and 200 for plan users, the owner and admin. The portrait returns 200. Logout bumps token_version, so the old login token and the old file token both get 401. The file token is 60 minutes with scope 'files'. It is rejected on /auth/me and /registrations, and also when sent as a Bearer header to /files. A login token passed in ?token= gets 401. Passwords over 72 bytes (including multibyte ones) get 422 and exactly 72 bytes works. CORS preflight from evil.com and lookalike domains gets no allow-origin header (400), while the app origin gets an exact-match header. Frontend (375x667): the free user sees the business locked card 'Contact details are for plan members' with no phone or email, and the matrimony locked card 'Full biodata is for Matrimony Plus members' with only the portrait requested. The plan user sees no locked cards, all 3 photos load with 200, business contacts are visible, and matrimony list photos return 200. The file token is fetched on login and on reload, and web image URLs carry the files-scope token, not the login token. The logout button calls /api/auth/logout (200), goes back to login, and the old token then gets 401. The login screen shows the lockout message and the long-password error. backend/.env is gitignored and has never been committed. No deprecated Expo packages were found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "The failed-attempt counter is not reset when a lock expires. failed_login_attempts stays at 5, so the first wrong password after the 15-minute lock makes it 6, which is >= 5, and the account locks for another 15 minutes. A user who mistypes once after waiting gets locked out again. Reproduced in test_relock_after_expiry_single_wrong (server.py:280-283)."},
+      {"endpoint": "POST /api/auth/login", "issue": "The lockout is per account only. Anyone who knows the username can lock out admin (or any user) with 5 wrong attempts, for as long as they keep doing it. There is no per-IP throttle and no admin unlock."},
+      {"endpoint": "POST /api/auth/login", "issue": "The 429 message always says 'Try again in 15 minutes', whatever time is actually left on locked_until."},
+      {"endpoint": "POST /api/auth/signup", "issue": "Passwords over 72 characters return the raw Pydantic message 'String should have at most 72 characters', because Field(max_length=72) runs before the custom validator. Multibyte passwords return 'Value error, Password is too long (max 72 characters)', but the limit is really 72 bytes, so a 30-character Marathi password is rejected under a '72 characters' message."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Login/Signup error", "issue": "The long-password signup shows the raw English Pydantic text 'String should have at most 72 characters'. There is no client-side check and no bilingual message, unlike the 6-character minimum check.", "testID": "login-error", "priority": "low"}
+    ],
+    "integration_issues": [
+      {"flow": "Web file token on app open while offline", "issue": "In auth.tsx, startFileTokens() is only called after /auth/me succeeds. If the app opens offline (or the server hiccups), the cached session is kept but there is no file token and no refresh timer. Web photos then return 401 (?token=) until the next full reload or login. The refresh also swallows errors and sets fileToken=null with no retry. Background tabs throttle setInterval, so the 45-minute refresh may come late. Suggest retrying on focus/visibilitychange, or when an image returns 401.", "affected_testIDs": []}
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_security.py",
+    "/app/backend/tests/seed_iter8_ui.py",
+    "/app/test_reports/pytest/iter8_all.xml"
+  ],
+  "action_items": [
+    "Fix the re-lock loop in login (server.py:280-283). When locked_until is set and already in the past, count the failure as the first attempt (failed_login_attempts = 1, locked_until = null). Alternatively, reset failed_login_attempts to 0 when the lock is applied and track the lock separately.",
+    "Optional: lower the risk of attackers locking out admin by keying the limiter on (username, IP), or by adding an admin unlock.",
+    "Optional: show the real minutes left in the 429 message, computed from locked_until.",
+    "Signup: add a client-side check (password longer than 72 bytes) with a bilingual message. In the backend, drop max_length=72 on SignupIn.password so the clearer validator message ('max 72 bytes') is the one shown.",
+    "auth.tsx: in the offline branch, also call startFileTokens() (or retry later) so web photos load once the network comes back."
+  ],
+  "critical_code_review_comments": [
+    "The preview ingress itself adds 'Access-Control-Allow-Origin: *' to NON-preflight responses for any origin. This is platform-level, not the app. The backend middleware is correct: localhost:8001 sends no allow-origin header for evil.com, and the preflight from evil.com is rejected with 400. Because auth uses Bearer headers and needs a preflight, this has no real impact.",
+    "The download endpoint treats every approved non-matrimony registration photo as public to logged-in users. This is expected, since business and member photos are not gated.",
+    "user_from_token rejects pre-change tokens that lack the 'tv' claim. Intended: users have to log in again once."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sonar_api.py (TestFiles.test_upload_download now uses /auth/file-token for ?token= and asserts the login token in the query returns 401)",
+    "/app/backend/tests/test_iter8_security.py (new)",
+    "/app/backend/tests/seed_iter8_ui.py (new; UI seed/cleanup)"
+  ],
+  "success_rate": {"backend": "98.9% (91/92 run; the 1 failure is the real re-lock bug)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Throwaway TEST_ users, an approved business and an approved matrimony profile were created via the API plus admin approval, then all deleted (registrations, files, subscriptions, users). admin and inbox_user were not touched (failed_login_attempts=0, not locked).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest tests/test_iter8_security.py` from /app/backend with EXPO_PUBLIC_BACKEND_URL exported. Note: uvicorn --reload watches /app/backend/tests, so editing test files while a suite is running restarts the backend and can hang that run. Edit first, then run. Web photos use the ?token=<files-scope token> query parameter; native apps use the Authorization header.",
+  "rca_of_issue": "Re-lock loop: the login failure UPDATE computes `failed_login_attempts + 1 >= 5` and never resets the counter when locked_until has expired. Reproduce: set failed_login_attempts=5 and locked_until=now()-1min, make 1 wrong login, then a correct login returns 429. Mitigation: `failed_login_attempts = case when locked_until is not null and locked_until <= now() then 1 else failed_login_attempts + 1 end`, and compute locked_until from that same new value."
+}

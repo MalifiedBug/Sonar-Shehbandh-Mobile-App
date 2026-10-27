@@ -58,8 +58,12 @@ export default function Detail() {
             <RegistrationView reg={data} />
             {(data as any).locked ? (
               <View style={s.lock} testID="detail-locked-card">
-                <Text style={s.lockTitle}>🔒 Full biodata is for Matrimony Plus members</Text>
-                <Text style={s.lockText}>See family background, relatives and partner expectations of every profile. / संपूर्ण बायोडाटा पाहण्यासाठी योजना घ्या.</Text>
+                <Text style={s.lockTitle}>{data.type === "business" ? "🔒 Contact details are for plan members" : "🔒 Full biodata is for Matrimony Plus members"}</Text>
+                <Text style={s.lockText}>
+                  {data.type === "business"
+                    ? "Get the phone, WhatsApp and email of every community business. / संपर्क तपशील पाहण्यासाठी योजना घ्या."
+                    : "See all photos, family background, relatives and partner expectations of every profile. / संपूर्ण बायोडाटा पाहण्यासाठी योजना घ्या."}
+                </Text>
                 <Btn label="View Plans / योजना पहा" variant="maroon" onPress={() => router.push("/plans")} testID="detail-unlock-button" />
               </View>
             ) : null}

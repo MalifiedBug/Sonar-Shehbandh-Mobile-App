@@ -40,8 +40,33 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 }
 
 export function fileSource(path: string) {
-  if (Platform.OS === "web") return { uri: `${BACKEND}/api/files/${path}?token=${token}` };
+  // Web can't send headers for <img>, so it uses a short-lived photo-only token, never the login token.
+  if (Platform.OS === "web") return { uri: `${BACKEND}/api/files/${path}?token=${fileToken ?? ""}` };
   return { uri: `${BACKEND}/api/files/${path}`, headers: { Authorization: `Bearer ${token}` } };
+}
+
+let fileToken: string | null = null;
+let fileTimer: ReturnType<typeof setInterval> | null = null;
+
+// Web only: fetch the photo token now and refresh it before it expires (valid 60 min).
+export async function startFileTokens() {
+  stopFileTokens();
+  if (Platform.OS !== "web") return;
+  const refresh = async () => {
+    try {
+      fileToken = (await api<{ token: string }>("/auth/file-token")).token;
+    } catch {
+      fileToken = null;
+    }
+  };
+  await refresh();
+  fileTimer = setInterval(refresh, 45 * 60 * 1000);
+}
+
+export function stopFileTokens() {
+  if (fileTimer) clearInterval(fileTimer);
+  fileTimer = null;
+  fileToken = null;
 }
 
 // Loads data whenever the screen gains focus; reload() for pull-to-refresh.

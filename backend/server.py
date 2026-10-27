@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -63,6 +63,7 @@ class User(BaseDocument):
     password_hash: str
     role: str = "user"
     created_at: str
+    token_version: int = 0
 
     def out(self) -> dict:
         return {"id": self.id, "username": self.username, "name": self.name, "role": self.role}
@@ -182,36 +183,58 @@ async def all_user_ids() -> List[str]:
 
 
 # ---------------------------------------------------------------- auth
+MAX_PW_BYTES = 72  # bcrypt only uses the first 72 bytes; reject longer instead of silently truncating
+MAX_FAILED_LOGINS = 5
+LOCK_MINUTES = 15
+FILE_TOKEN_MINUTES = 60
+DUMMY_HASH = bcrypt.hashpw(b"dummy-password", bcrypt.gensalt()).decode()
+
+
+def check_pw_len(p: str) -> str:
+    if len(p.encode("utf-8")) > MAX_PW_BYTES:
+        raise ValueError("Password is too long (max 72 English letters, fewer for Marathi) / पासवर्ड खूप लांब आहे")
+    return p
+
+
 class SignupIn(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     name: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=6, max_length=100)
+    password: str = Field(min_length=6, max_length=200)
+
+    @field_validator("password")
+    @classmethod
+    def _pw(cls, v: str) -> str:
+        return check_pw_len(v)
 
 
 class LoginIn(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=60)
+    password: str = Field(max_length=200)
 
 
 def hash_pw(p: str) -> str:
     return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
 
 
-def make_token(user_id: str) -> str:
+def make_token(user_id: str, token_version: int = 0, scope: str = "api", minutes: Optional[int] = None) -> str:
     now = datetime.now(timezone.utc)
-    return jwt.encode({"sub": user_id, "iat": now, "exp": now + timedelta(days=TOKEN_DAYS)}, JWT_SECRET, algorithm=JWT_ALG)
+    exp = now + (timedelta(minutes=minutes) if minutes else timedelta(days=TOKEN_DAYS))
+    return jwt.encode({"sub": user_id, "tv": token_version, "scope": scope, "iat": now, "exp": exp}, JWT_SECRET, algorithm=JWT_ALG)
 
 
-async def user_from_token(token: Optional[str]) -> User:
+async def user_from_token(token: Optional[str], scope: str = "api") -> User:
+    """Validates signature, expiry, scope and token_version (bumped on logout to revoke old tokens)."""
     if not token:
         raise HTTPException(401, "Not authenticated")
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG], options={"require": ["sub", "exp", "tv"]})
     except jwt.PyJWTError:
         raise HTTPException(401, "Invalid or expired token")
+    if payload.get("scope", "api") != scope:
+        raise HTTPException(401, "Invalid token for this request")
     row = await pg.fetchrow("select * from sonar.users where id = $1", str(payload.get("sub", "")))
-    if not row:
-        raise HTTPException(401, "User not found")
+    if not row or row.get("token_version", 0) != payload.get("tv"):
+        raise HTTPException(401, "Session expired, please log in again")
     return User.from_row(row)
 
 
@@ -239,21 +262,53 @@ async def signup(body: SignupIn):
     except asyncpg.UniqueViolationError:
         raise HTTPException(409, "Username already taken")
     user = User.from_row(row)
-    return {"token": make_token(user.id), "user": user.out()}
+    return {"token": make_token(user.id, row["token_version"]), "user": user.out()}
 
 
 @api.post("/auth/login")
 async def login(body: LoginIn):
+    pw = body.password.encode()
     row = await pg.fetchrow("select * from sonar.users where username = $1", body.username.strip().lower())
-    if not row or not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
+    if not row:
+        await run_in_threadpool(bcrypt.checkpw, pw[:MAX_PW_BYTES], DUMMY_HASH.encode())  # same timing as a real check
         raise HTTPException(401, "Invalid username or password")
+    if row["locked_until"] and datetime.fromisoformat(row["locked_until"]) > datetime.now(timezone.utc):
+        left = max(1, int((datetime.fromisoformat(row["locked_until"]) - datetime.now(timezone.utc)).total_seconds() // 60) + 1)
+        raise HTTPException(429, f"Too many wrong attempts. Try again in {left} minute{'s' if left > 1 else ''}. / खूप चुकीचे प्रयत्न, थोड्या वेळाने प्रयत्न करा.")
+    ok = len(pw) <= MAX_PW_BYTES and await run_in_threadpool(bcrypt.checkpw, pw, row["password_hash"].encode())
+    if not ok:
+        # Atomic counter; locks the account for LOCK_MINUTES after MAX_FAILED_LOGINS wrong passwords.
+        # An expired lock starts a fresh count, so one more mistake doesn't re-lock immediately.
+        await pg.execute(
+            "update sonar.users set "
+            "failed_login_attempts = case when locked_until is not null and locked_until <= now() then 1 else failed_login_attempts + 1 end, "
+            "locked_until = case when (case when locked_until is not null and locked_until <= now() then 1 else failed_login_attempts + 1 end) >= $2 "
+            "then now() + make_interval(mins => $3) else null end "
+            "where id = $1", row["id"], MAX_FAILED_LOGINS, LOCK_MINUTES)
+        raise HTTPException(401, "Invalid username or password")
+    if row["failed_login_attempts"] or row["locked_until"]:
+        await pg.execute("update sonar.users set failed_login_attempts = 0, locked_until = null where id = $1", row["id"])
     user = User.from_row(row)
-    return {"token": make_token(user.id), "user": user.out()}
+    return {"token": make_token(user.id, row["token_version"]), "user": user.out()}
+
+
+@api.post("/auth/logout")
+async def logout(user: User = Depends(current_user)):
+    # Revokes every token issued to this user (all devices).
+    await pg.execute("update sonar.users set token_version = token_version + 1 where id = $1", user.id)
+    return {"ok": True}
 
 
 @api.get("/auth/me")
 async def me(user: User = Depends(current_user)):
     return user.out()
+
+
+@api.get("/auth/file-token")
+async def file_token(user: User = Depends(current_user)):
+    """Short-lived token that can only download photos (used in web image URLs instead of the login token)."""
+    return {"token": make_token(user.id, user.token_version, scope="files", minutes=FILE_TOKEN_MINUTES),
+            "expires_in": FILE_TOKEN_MINUTES * 60}
 
 
 class RegisterPushBody(BaseModel):
@@ -311,15 +366,22 @@ async def upload(file: UploadFile = File(...), user: User = Depends(current_user
 
 @api.get("/files/{path:path}")
 async def download(path: str, token: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
-    if not token and authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1]
-    user = await user_from_token(token)
+    # Header = normal login token (native). Query = short-lived photo-only token from /auth/file-token (web).
+    if authorization and authorization.lower().startswith("bearer "):
+        user = await user_from_token(authorization.split(" ", 1)[1])
+    else:
+        user = await user_from_token(token, scope="files")
     rec = await pg.fetchrow("select * from sonar.files where storage_path = $1", path)
     if not rec:
         raise HTTPException(404, "File not found")
     if rec["owner_id"] != user.id and user.role != "admin":
-        if not await pg.fetchval("select 1 from sonar.registrations where photo_paths @> array[$1]::text[] and status = 'approved' limit 1", path):
+        regs = await pg.fetch("select type, photos from sonar.registrations where photo_paths @> array[$1]::text[] and status = 'approved'", path)
+        if not regs:
             raise HTTPException(404, "File not found")
+        # Free users only see the matrimony portrait; full/half photos need a plan.
+        public = any(r["type"] != "matrimony" or ((r["photos"] or {}).get("portrait") or {}).get("path") == path for r in regs)
+        if not public and await payments.active_rank(user.id) < 1:
+            raise HTTPException(403, "A plan is needed to view this photo")
     try:
         data = await run_in_threadpool(storage.get_object, path)
     except Exception:
@@ -459,11 +521,10 @@ async def list_registrations(type: str, q: str = "", sub_caste: str = "", catego
         for r in regs:
             r.featured = ranks.get(r.owner_id, 0) >= need
         regs.sort(key=lambda r: not r.featured)
-    if type == "matrimony" and user.role != "admin" and await payments.active_rank(user.id) < 1:
+    if type in ("matrimony", "business") and user.role != "admin" and await payments.active_rank(user.id) < 1:
         for r in regs:
             if r.owner_id != user.id:
-                r.data = {k: v for k, v in r.data.items() if k in MATRIMONY_PUBLIC_KEYS}
-                r.locked = True
+                lock_reg(r)
     return [reg_out(r) for r in regs]
 
 
@@ -481,15 +542,26 @@ async def get_registration(rid: str, user: User = Depends(current_user)):
     reg = Registration.from_row(row)
     if reg.status != "approved" and reg.owner_id != user.id and user.role != "admin":
         raise HTTPException(404, "Not found")
-    # Full matrimony biodata needs Matrimony Plus or higher (owner and admins always see everything).
-    if reg.type == "matrimony" and reg.owner_id != user.id and user.role != "admin" and await payments.active_rank(user.id) < 1:
-        reg.data = {k: v for k, v in reg.data.items() if k in MATRIMONY_PUBLIC_KEYS}
-        reg.locked = True
+    # Full matrimony biodata and business contacts need any paid plan (owner and admins always see everything).
+    if reg.type in ("matrimony", "business") and reg.owner_id != user.id and user.role != "admin" and await payments.active_rank(user.id) < 1:
+        lock_reg(reg)
     return reg_out(reg)
 
 
 MATRIMONY_PUBLIC_KEYS = {"category", "remarriage_gender", "full_name", "sub_caste", "dob", "height", "complexion",
                          "rashi", "qualification", "occupation_type", "work_location"}
+BUSINESS_PRIVATE_KEYS = {"phone1", "phone2", "whatsapp", "email"}
+
+
+def lock_reg(r: Registration) -> None:
+    """Strips paid-only fields for users without an active plan."""
+    if r.type == "matrimony":
+        r.data = {k: v for k, v in r.data.items() if k in MATRIMONY_PUBLIC_KEYS}
+        r.photos = {k: v for k, v in r.photos.items() if k == "portrait"}
+        r.photo_paths = [p.get("path") for p in r.photos.values() if isinstance(p, dict) and p.get("path")]
+    else:
+        r.data = {k: v for k, v in r.data.items() if k not in BUSINESS_PRIVATE_KEYS}
+    r.locked = True
 
 
 class RejectIn(BaseModel):
@@ -785,7 +857,15 @@ async def read_one(nid: str, user: User = Depends(current_user)):
 app.include_router(api)
 app.include_router(payments.make_router(current_user))
 
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Native apps send no Origin header, so CORS only affects the web version: allow our own domains only.
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=False,
+    allow_origins=[o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()],
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*(emergentagent\.com|emergent\.host)",
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 @app.on_event("startup")

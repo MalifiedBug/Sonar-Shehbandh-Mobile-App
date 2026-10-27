@@ -80,3 +80,5 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+# Secrets (frontend/.env only holds public URLs and is needed for builds)
+backend/.env

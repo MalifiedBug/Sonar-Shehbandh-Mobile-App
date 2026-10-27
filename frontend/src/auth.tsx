@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { storage } from "@/src/utils/storage";
-import { api, ApiError, setToken } from "@/src/api";
+import { api, ApiError, setToken, startFileTokens, stopFileTokens } from "@/src/api";
 import { registerForPush } from "@/src/push";
 
 export type User = { id: string; username: string; name: string; role: "user" | "admin" };
@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(t);
         try {
           const me = await api<User>("/auth/me");
+          await startFileTokens();
           setUser(me);
           await storage.setItem(USER_KEY, JSON.stringify(me));
         } catch (e) {
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             // Offline or server hiccup: keep the session with the last known profile.
             const cached = await storage.getItem<string | null>(USER_KEY, null);
+            if (cached) await startFileTokens(); // starts the refresh timer so photos recover once back online
             setUser(cached ? (JSON.parse(cached) as User) : null);
           }
         }
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(res.token);
     await storage.secureSet(KEY, res.token);
     await storage.setItem(USER_KEY, JSON.stringify(res.user));
+    await startFileTokens();
     setUser(res.user);
   };
 
@@ -64,6 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await accept(await api("/auth/signup", { method: "POST", body: { name, username, password } }));
   };
   const logout = async () => {
+    // Revoke the token on the server too, so a copied token stops working. Never block logout on network.
+    await api("/auth/logout", { method: "POST" }).catch(() => {});
+    stopFileTokens();
     setToken(null);
     await storage.secureRemove(KEY);
     await storage.removeItem(USER_KEY);

@@ -40,7 +40,8 @@ PLANS: Dict[str, dict] = {
     "silver": {
         "id": "silver", "rank": 1, "name": "Matrimony Plus / वधू-वर प्लस", "price": 299,
         "features": [
-            "Full biodata of every matrimony profile (family, relatives, partner expectations)",
+            "Full biodata and all photos of every matrimony profile (family, relatives, partner expectations)",
+            "Phone, WhatsApp and email of every business in the directory",
             "Unlimited shortlisting of profiles",
             "Valid for 1 year",
         ],

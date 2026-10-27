@@ -78,8 +78,12 @@ class TestFiles:
         r = requests.post(f"{API}/upload", headers=H(user["token"]), files={"file": ("p.png", io.BytesIO(PNG), "image/png")}, timeout=60)
         assert r.status_code == 200, r.text
         path = r.json()["path"]
-        d = requests.get(f"{API}/files/{path}", params={"token": user["token"]}, timeout=60)
+        # Web uses a short-lived files-scope token in ?token=; login token only via Authorization header.
+        ft = requests.get(f"{API}/auth/file-token", headers=H(user["token"]), timeout=60).json()["token"]
+        d = requests.get(f"{API}/files/{path}", params={"token": ft}, timeout=60)
         assert d.status_code == 200 and d.content == PNG
+        assert requests.get(f"{API}/files/{path}", headers=H(user["token"]), timeout=60).content == PNG
+        assert requests.get(f"{API}/files/{path}", params={"token": user["token"]}, timeout=60).status_code == 401
         assert requests.get(f"{API}/files/{path}").status_code == 401
 
     def test_upload_non_image(self, user):
