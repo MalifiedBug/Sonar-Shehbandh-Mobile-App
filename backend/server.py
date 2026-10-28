@@ -166,7 +166,7 @@ def notify(recipients: List[str], title: str, message: str, action_url: Optional
     recipients = [r for r in dict.fromkeys(recipients) if r]
     if not recipients:
         return
-    data = {"title": title, "message": message}
+    data = {"title": title, "message": message, "channel_id": "alerts-flute", "sound": "flute_chime.wav"}
     if action_url:
         data["action_url"] = action_url
     task = asyncio.create_task(_notify(recipients, data, key))
@@ -200,6 +200,7 @@ class SignupIn(BaseModel):
     username: str = Field(min_length=3, max_length=30)
     name: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=6, max_length=200)
+    remember: bool = True
 
     @field_validator("password")
     @classmethod
@@ -210,6 +211,11 @@ class SignupIn(BaseModel):
 class LoginIn(BaseModel):
     username: str = Field(max_length=60)
     password: str = Field(max_length=200)
+    remember: bool = True  # "Remember me": 30-day session, otherwise 24 hours
+
+
+def session_minutes(remember: bool) -> int:
+    return TOKEN_DAYS * 24 * 60 if remember else 24 * 60
 
 
 def hash_pw(p: str) -> str:
@@ -262,7 +268,7 @@ async def signup(body: SignupIn):
     except asyncpg.UniqueViolationError:
         raise HTTPException(409, "Username already taken")
     user = User.from_row(row)
-    return {"token": make_token(user.id, row["token_version"]), "user": user.out()}
+    return {"token": make_token(user.id, row["token_version"], minutes=session_minutes(body.remember)), "user": user.out()}
 
 
 @api.post("/auth/login")
@@ -289,7 +295,7 @@ async def login(body: LoginIn):
     if row["failed_login_attempts"] or row["locked_until"]:
         await pg.execute("update sonar.users set failed_login_attempts = 0, locked_until = null where id = $1", row["id"])
     user = User.from_row(row)
-    return {"token": make_token(user.id, row["token_version"]), "user": user.out()}
+    return {"token": make_token(user.id, row["token_version"], minutes=session_minutes(body.remember)), "user": user.out()}
 
 
 @api.post("/auth/logout")

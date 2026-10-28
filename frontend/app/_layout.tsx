@@ -16,6 +16,7 @@ import { ToastProvider, Btn, Sheet } from "@/src/components/ui";
 import { colors } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 import { Notifications } from "@/src/notifications";
+import { registerForPush } from "@/src/push";
 
 LogBox.ignoreAllLogs(true);
 
@@ -32,12 +33,18 @@ if (Notifications) {
   });
 }
 
-// Push: Android channel must exist before any push arrives (module scope)
+// Push: Android channels must exist before any push arrives (module scope).
+// Channel sound is frozen once created, so the flute sound lives on a new channel id.
 if (Notifications && Platform.OS === "android") {
   Notifications.setNotificationChannelAsync("default", {
     name: "Default",
     importance: Notifications.AndroidImportance.MAX,
     sound: "default",
+  });
+  Notifications.setNotificationChannelAsync("alerts-flute", {
+    name: "Community alerts",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "flute_chime.wav",
   });
 }
 
@@ -62,10 +69,10 @@ function PushHandlers() {
     const sub = N.addNotificationResponseReceivedListener((r) => openFromNotification(router, r));
     // Cold-start tap
     N.getLastNotificationResponseAsync().then((r) => openFromNotification(router, r));
-    // Weekly nudge if notifications are permanently denied
+    // Weekly nudge while notifications are turned off
     (async () => {
-      const { status, canAskAgain } = await N.getPermissionsAsync();
-      if (status !== "denied" || canAskAgain) return;
+      const { status } = await N.getPermissionsAsync();
+      if (status !== "denied") return;
       const last = await storage.getItem<string | null>("pushNudgeAt", null);
       if (last && Date.now() - Number(last) <= 7 * 24 * 60 * 60 * 1000) return;
       setNudge(true);
@@ -73,20 +80,29 @@ function PushHandlers() {
     return () => sub.remove();
   }, [router, user]);
 
-  const close = async (open: boolean) => {
+  const close = async (enable: boolean) => {
     await storage.setItem("pushNudgeAt", String(Date.now()));
     setNudge(false);
-    if (open) Linking.openSettings();
+    if (!enable || !Notifications) return;
+    // Ask once more in-app if the OS still allows it; otherwise send them to Settings.
+    const { canAskAgain } = await Notifications.getPermissionsAsync();
+    if (canAskAgain) {
+      const res = await Notifications.requestPermissionsAsync();
+      if (res.status === "granted" && user) registerForPush(user.id);
+      else if (!res.canAskAgain) Linking.openSettings();
+    } else {
+      Linking.openSettings();
+    }
   };
 
   return (
     <Sheet visible={nudge} onClose={() => close(false)} title="Turn on notifications / सूचना सुरू करा" testID="push-nudge-sheet">
       <Text style={styles.nudgeText}>
-        Get alerts when your registration is approved and when the committee posts news, events or notices.
+        Notifications are turned off. Turn them on to get alerts — with a soft flute tune — when your registration is approved and when the committee posts news, events or notices. / सूचना सुरू करा.
       </Text>
       <View style={styles.nudgeBtns}>
         <Btn label="Later / नंतर" variant="ghost" onPress={() => close(false)} style={{ flex: 1 }} testID="push-nudge-later" />
-        <Btn label="Open Settings" variant="primary" onPress={() => close(true)} style={{ flex: 1 }} testID="push-nudge-settings" />
+        <Btn label="Turn On / सुरू करा" variant="primary" onPress={() => close(true)} style={{ flex: 1 }} testID="push-nudge-settings" />
       </View>
     </Sheet>
   );

@@ -55,7 +55,8 @@
       [
         "expo-notifications",
         {
-          "color": "#8B1818"
+          "color": "#8B1818",
+          "sounds": ["./assets/sounds/flute_chime.wav"]
         }
       ]
     ],

@@ -8,8 +8,8 @@ export type User = { id: string; username: string; name: string; role: "user" | 
 type AuthCtx = {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  signup: (name: string, username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, remember: boolean) => Promise<void>;
+  signup: (name: string, username: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -60,11 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.user);
   };
 
-  const login = async (username: string, password: string) => {
-    await accept(await api("/auth/login", { method: "POST", body: { username, password } }));
+  const login = async (username: string, password: string, remember: boolean) => {
+    await accept(await api("/auth/login", { method: "POST", body: { username, password, remember } }));
   };
-  const signup = async (name: string, username: string, password: string) => {
-    await accept(await api("/auth/signup", { method: "POST", body: { name, username, password } }));
+  const signup = async (name: string, username: string, password: string, remember: boolean) => {
+    await accept(await api("/auth/signup", { method: "POST", body: { name, username, password, remember } }));
   };
   const logout = async () => {
     // Revoke the token on the server too, so a copied token stops working. Never block logout on network.
