@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sonar Shehbandh",
     "slug": "frontend",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#8B1818"
       },
       "package": "com.emergent.sonarshehbandh.hxexh3",
       "permissions": [
@@ -35,9 +35,13 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",
-          "imageWidth": 200,
+          "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#FBF7EE",
+          "dark": {
+            "image": "./assets/images/splash-image.png",
+            "backgroundColor": "#FBF7EE"
+          }
         }
       ],
       "expo-font",
@@ -56,7 +60,9 @@
         "expo-notifications",
         {
           "color": "#8B1818",
-          "sounds": ["./assets/sounds/flute_chime.wav"]
+          "sounds": [
+            "./assets/sounds/flute_chime.wav"
+          ]
         }
       ]
     ],

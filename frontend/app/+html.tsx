@@ -17,6 +17,8 @@ export default function Root({ children }: PropsWithChildren) {
           If you want to enable scrolling, remove `ScrollViewStyleReset` and
           set `overflow: auto` on the body style below.
         */}
+        <meta name="theme-color" content="#8B1818" />
+        <title>Sonar Shehbandh Community</title>
         <ScrollViewStyleReset />
         <style
           dangerouslySetInnerHTML={{
@@ -35,6 +37,7 @@ export default function Root({ children }: PropsWithChildren) {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
+          backgroundColor: "#FBF7EE",
         }}
       >
         {children}
