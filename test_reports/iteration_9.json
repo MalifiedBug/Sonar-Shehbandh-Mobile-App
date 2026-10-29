@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 9 (frontend only, UX redesign: app shell + Home + Directories). Tested on the preview URL at 375x667 with admin, inbox_user, a TEST free user and a TEST plan user. Seeded data was cleaned up afterwards: a TEST future event, a TEST notice and the iter8 business, matrimony profile and users (one owner was given the gold plan so the business shows as featured). WORKS: login lands on Home. The bottom tab bar has 5 tabs, an active pill and the red alerts dot. The top bar avatar opens Profile, and the bell opens Alerts with a 99+ / count badge. The welcome hero shows when there are no events. The event hero shows the date badge (3 NOV), the location, '5 days to go', 'View Details' going to /post/{id} and 'All Events' going to /events. Tapping a nested button does not also trigger the parent card. All 11 quick-access tiles route correctly; the admin tile shows for admin only. News opens the Terms modal and then /news. The metrics show the right counts. The latest-updates card shows the Notice, Level and New badges and opens /post/{id}. The business carousel shows only when businesses exist, with Local Partner and Featured badges, and opens /detail/{id}. Register CTA buttons open the Terms modal; accept goes to /register/{type} and decline closes it. The Directory tab shows the 3 cards with counts, and the cards and Essentials rows route and come back correctly. The directory list shows the skeleton, Verified/Local Partner, Featured, sub-caste and Blood badges. Quick Call and WhatsApp work for the plan user (WhatsApp opens api.whatsapp.com with a 91 prefix), and tapping them does not open the card. A free user sees the unlock row, which goes to /plans. Search, sub-caste chips, the empty state and Clear filters work. Matrimony and Alerts have no back arrow. Profile shows the role and plan badges ('Active until ...'), Services show the 'Coming soon' toast, Complaints opens, and Logout goes to /login. Deep links all render: /events, /news, /plans, /mine, /admin, /post, /detail and /register. Plus Jakarta Sans is loaded and used (Regular, SemiBold, Bold, ExtraBold). BUGS: (1) The /mine back button always goes to Home (router.replace('/')), even when opened from Profile, and it leaves a duplicate tab navigator in the DOM. (2) Share on the web throws an unhandled 'Share is not supported in this browser' error. (3) The testID dash-link-admin is used twice. Plus minor UX items. No deprecated Expo packages detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "My Submissions back button", "issue": "Profile > My Submissions > back lands on Home ('/'), not Profile. Cause: Header onBack={() => router.replace('/')} is hard-coded. After the replace, 2 copies of the tab bar (tab-profile etc.) exist in the DOM. Reference: /app/frontend/app/mine.tsx:21", "testID": "header-back-button", "priority": "MEDIUM"},
+      {"component": "Home update share button", "issue": "On the web (no navigator.share), Share.share rejects with 'Share is not supported in this browser'. This is an uncaught page error with no fallback. Reference: /app/frontend/app/(tabs)/index.tsx:218", "testID": "home-update-share-{id}", "priority": "LOW"},
+      {"component": "Alerts tab dot", "issue": "After 'Read all' on the Alerts tab, the red dot stays until the user switches tab, because unread is only refetched when state.index changes. Reference: /app/frontend/app/(tabs)/_layout.tsx:28-30", "testID": "tab-alerts-dot", "priority": "LOW"},
+      {"component": "Directory list header", "issue": "While loading, the subtitle shows '0 approved listings' next to the skeleton, before the real count arrives. Reference: /app/frontend/app/directory/[type].tsx:58", "testID": "n/a", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Directory list / ContactActions", "issues": ["Quick Call, WhatsApp and the unlock row are 40px tall, below the 44px minimum touch target (kit.tsx:170,174)", "At 375px the unlock text 'Unlock contacts with a plan / संपर्कासाठी योजना' wraps to 2 lines inside the fixed 40px-high row and looks cramped", "On the web, the search TextInput shows a black browser focus outline inside the rounded field"]},
+      {"screen": "Home", "issues": ["The profile avatar button is 40x40 (hitSlop 6 makes up for it)", "The 'Explore Directory' button in the welcome hero has no testID"]},
+      {"screen": "Tab bar", "issues": ["accessibilityState.selected is not exposed as aria-selected on the web (aria-selected is null), so screen readers and tests cannot tell which tab is active"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/seed_iter9_ui.py", "/app/backend/tests/seed_iter9_featured.py", "/app/backend/tests/seed_iter8_ui.py"],
+  "action_items": [
+    "mine.tsx:21 - change onBack to router.canGoBack() ? router.back() : router.replace('/') so Profile > My Submissions > back returns to Profile. The post-submit router.replace('/mine') still works.",
+    "index.tsx:218 - wrap Share.share in try/catch. On the web, fall back to navigator.clipboard plus a toast, or hide the button when Platform.OS==='web' && !navigator.share.",
+    "profile.tsx:64 - rename the duplicate testID 'dash-link-admin' to 'profile-admin-panel'. The Home tile already uses dash-link-admin and both are mounted at the same time.",
+    "_layout.tsx TabBar - also refresh the unread count after notifications-read-all (shared store or event), or poll on focus.",
+    "Optional: raise ContactActions and lockRow height to 44, and shorten or ellipsize the lock text.",
+    "Optional: Home makes 4 full-list calls on every focus (3 for counts in useDirectoryCounts, plus /registrations?type=business again for the carousel). Reuse the business list or add a counts endpoint."
+  ],
+  "critical_code_review_comments": [
+    "useDirectoryCounts downloads the full registration lists (up to 500 rows each) just to count them. This runs on every focus of Home and the Directory tab (useLoad uses useFocusEffect).",
+    "The hero parses event_date 'YYYY-MM-DD' with new Date(), which treats it as UTC. In negative-UTC timezones the date badge and countdown are off by one day. This is fine for IST users.",
+    "Nested Pressables (All Events inside the hero Pressable, share inside the Card Pressable, call/WA inside the directory Card) behave correctly on the web. Re-check on native Android/iOS.",
+    "The Profile Admin row reuses testID dash-link-admin, which clashes with the Home tile because both are mounted inside the Tabs."
+  ],
+  "updated_files": ["/app/backend/tests/seed_iter9_ui.py (new)", "/app/backend/tests/seed_iter9_featured.py (new)"],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "95% - 1 medium navigation bug and 3 low bugs out of about 60 checks"},
+  "seed_data_creation": "Created and then DELETED: the TEST_Iter9 event and notice (admin posts), plus the iter8 TEST business, matrimony profile and 3 TEST users via seed_iter8_ui.py seed/cleanup. The plan-user notifications were marked read before the user was deleted. The 'New submission' admin notifications for the TEST_UI items may still be in admin's inbox.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test via https://sonar-shehbandh.preview.emergentagent.com (CORS). Use the preview URL instead of localhost. Export EXPO_PUBLIC_BACKEND_URL before running the tests/ scripts. Run seed_iter9_ui.py seed|notice|cleanup|state for an event/notice. Run seed_iter8_ui.py seed|cleanup for a business, a free user and a plan user (password secret123, usernames in /tmp/iter8_ui.json). Run seed_iter9_featured.py to make that business featured. Tabs stay mounted, so use ':visible' selectors (tab-*, header-back-button). Do not mark inbox_user notifications as read.",
+  "rca_of_issue": "Back from /mine goes to Home: app/mine.tsx overrides the Header onBack with router.replace('/'). This was written for the post-submit flow (register uses router.replace('/mine')), but /mine can now also be opened from the Profile tab. Repro: log in, open the Profile tab, tap My Submissions, tap back: the URL is '/' (Home) instead of '/profile'. Fix: use canGoBack() ? back() : replace('/')."
+}

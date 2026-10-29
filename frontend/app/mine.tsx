@@ -18,7 +18,7 @@ export default function Mine() {
   const { data, loading, refreshing, reload, error } = useLoad(() => api<Reg[]>("/registrations/mine"));
   return (
     <View style={s.root}>
-      <Header title="My Submissions / माझे अर्ज" onBack={() => router.replace("/")} />
+      <Header title="My Submissions / माझे अर्ज" onBack={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
       {loading ? (
         <ActivityIndicator color={colors.brand} style={{ marginTop: 48 }} />
       ) : (

@@ -8,17 +8,19 @@ import { makeStyles, useTheme } from "@/src/theme";
 export const Icon = MaterialDesignIcons;
 
 // ------------------------------------------------------------------ Header
-export function Header({ title, subtitle, right, onBack, testID }: { title: string; subtitle?: string; right?: React.ReactNode; onBack?: () => void; testID?: string }) {
+export function Header({ title, subtitle, right, onBack, hideBack, testID }: { title: string; subtitle?: string; right?: React.ReactNode; onBack?: () => void; hideBack?: boolean; testID?: string }) {
   const s = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const back = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/")));
   return (
-    <View style={[s.header, { paddingTop: insets.top + 8 }]} testID={testID}>
-      <Pressable onPress={back} style={s.headerBtn} hitSlop={8} testID="header-back-button">
-        <Icon name="arrow-left" size={24} color={colors.brand} />
-      </Pressable>
+    <View style={[s.header, { paddingTop: insets.top + 8 }, hideBack && { paddingLeft: 16 }]} testID={testID}>
+      {hideBack ? null : (
+        <Pressable onPress={back} style={s.headerBtn} hitSlop={8} testID="header-back-button">
+          <Icon name="arrow-left" size={24} color={colors.brand} />
+        </Pressable>
+      )}
       <View style={{ flex: 1 }}>
         <Text style={s.headerTitle} numberOfLines={2}>{title}</Text>
         {subtitle ? <Text style={s.headerSub} numberOfLines={1}>{subtitle}</Text> : null}
@@ -178,7 +180,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 const useStyles = makeStyles((c) => ({
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingBottom: 10, backgroundColor: c.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: c.border },
   headerBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22 },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: c.brand },
+  headerTitle: { fontSize: 17, fontWeight: "800", color: c.brand, letterSpacing: -0.2 },
   headerSub: { fontSize: 12, color: c.muted, marginTop: 2 },
   btn: { minHeight: 48, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   btnText: { fontSize: 14, fontWeight: "700", textAlign: "center" },

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
 import { api, useLoad } from "@/src/api";
 import { Empty, Header, Icon, useToast } from "@/src/components/ui";
+import { refreshUnreadDot } from "@/src/components/kit";
 
 type Notif = { id: string; title: string; message: string; action_url?: string | null; read: boolean; created_at: string };
 
@@ -42,7 +43,7 @@ export default function Notifications() {
   const open = async (n: Notif) => {
     if (!n.read) {
       setData((data ?? []).map((x) => (x.id === n.id ? { ...x, read: true } : x)));
-      api(`/notifications/${n.id}/read`, { method: "POST" }).catch(() => {});
+      api(`/notifications/${n.id}/read`, { method: "POST" }).then(refreshUnreadDot).catch(() => {});
     }
     if (n.action_url) router.push(n.action_url as any);
   };
@@ -51,6 +52,7 @@ export default function Notifications() {
     try {
       await api("/notifications/read-all", { method: "POST" });
       setData((data ?? []).map((x) => ({ ...x, read: true })));
+      refreshUnreadDot();
     } catch (e: any) {
       toast(e?.message ?? "Failed", "error");
     }
@@ -59,6 +61,7 @@ export default function Notifications() {
   return (
     <View style={s.root}>
       <Header
+        hideBack
         title="Notifications / सूचना"
         subtitle={unread ? `${unread} unread / न वाचलेल्या` : "All caught up / सर्व वाचले"}
         right={

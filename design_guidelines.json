@@ -1,0 +1,140 @@
+{
+  "app_name": "Sonar Shehbandh Community",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "Clean, modern, trustworthy civic tech with generous white space, subtle borders, and soft elevation shadows.",
+  "color": {
+    "surface": "#FBF7EE",
+    "onSurface": "#1A1A1A",
+    "surfaceSecondary": "#FFFDF7",
+    "onSurfaceSecondary": "#2D2D2D",
+    "surfaceTertiary": "#FFFFFF",
+    "onSurfaceTertiary": "#1A1A1A",
+    "surfaceInverse": "#1C2429",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#8B1818",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#008080",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#0A2540",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#FBF1D6",
+    "onBrandTertiary": "#B8860B",
+    "success": "#2E7D32",
+    "onSuccess": "#FFFFFF",
+    "warning": "#B8860B",
+    "onWarning": "#FFFFFF",
+    "error": "#D32F2F",
+    "onError": "#FFFFFF",
+    "info": "#008080",
+    "onInfo": "#FFFFFF",
+    "border": "#E0E0E0",
+    "borderStrong": "#BDBDBD",
+    "divider": "#E0E0E0",
+    "muted": "#6E7174"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous white space (margins lg/xl). Keep layout blocks clearly separated, allowing information to breathe without heavy borders.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use subtle glass effect on the bottom tab bar and top header to keep the civic platform feeling premium but clear.",
+      "Ensure strong backdrop tinting on glass to preserve text contrast."
+    ],
+    "dont's": [
+      "Do not use glass inside the content cards or lists."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home Dashboard",
+      "purpose": "Serve as the community anchor with high-visibility hero events, a quick-action grid, and a multi-type feed.",
+      "states": {
+        "loading": "Skeleton UI matching the hero anchor, quick action launcher, and feed card layouts.",
+        "empty": "Illustration of community building with 'Welcome to Sonar Shehbandh Community' text.",
+        "error": "Readable error message 'Unable to load feed.' with a Retry button."
+      },
+      "layout": "Top Header: User avatar on left, bell icon with red unread dot on right (using brandSecondary for icons).\nSection 1: Pinned / Hero Anchor banner spanning screen width minus margin. Dark gradient overlay with event title, RSVP counters, and date badges. \nSection 2: Quick Action Launcher. Horizontal scrolling grid of icons/chips with notification badges. \nSection 3: Rich Feed. Cards for notices, business, and volunteer features. Official notices should highlight author role and have attachment tiles."
+    },
+    {
+      "name": "Directory Hub & List",
+      "purpose": "A filterable list of members, businesses, and social workers providing immediate utility via quick actions.",
+      "states": {
+        "loading": "List of skeleton cards.",
+        "empty": "Icon of empty folder + 'No directory items match your filters.' + 'Clear Filters' CTA.",
+        "error": "Error message 'Unable to load directory.' + Retry button."
+      },
+      "layout": "Top: Sticky Search bar and horizontal sub-caste/category filter chips.\nList Rows: Use elevated cards (`surfaceSecondary` with shadow tier 1) since they contain mixed media/actions. \nCard Anatomy: Left - Photo thumbnail; Center - Title, subtitle, sub-caste tag, and prominent 'FEATURED' badge (brandPrimary teal); Bottom - Action pair (Quick Call vs WhatsApp). Phone number gated state shows 'Unlock with plan' lock icon instead of numbers."
+    }
+  ],
+  "haptics": {
+    "events": {
+      "tab_press": "light",
+      "quick_action_tap": "light",
+      "call_button_press": "medium",
+      "rsvp_press": "success"
+    }
+  },
+  "images": {
+    "hero_event": {
+      "url": "https://images.unsplash.com/photo-1774437777897-4cae5a0be15a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODd8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBjb21tdW5pdHklMjBldmVudHxlbnwwfHx8fDE3OTMyMzM5NDF8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Indian community event celebration"
+    },
+    "business_directory_cover": {
+      "url": "https://images.unsplash.com/photo-1614595737476-42487331b8a1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBvZmZpY2UlMjBmYWNhZGV8ZW58MHx8fHwxNzkzMjMzOTQxfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern office facade"
+    },
+    "matrimony_cover": {
+      "url": "https://images.unsplash.com/photo-1680491026542-a99730a0e235?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMGluZGlhbiUyMHdlZGRpbmclMjBmbG9yYWwlMjBkZWNvcmF0aW9ufGVufDB8fHx8MTc5MzIzMzk0MXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Traditional Indian wedding floral decoration"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the provided user color palette (surface #FBF7EE, brand maroon #8B1818, brandPrimary teal #008080, brandSecondary navy #0A2540).",
+    "Typography must be Plus Jakarta Sans exclusively, maximum font weight 500. Hierarchy is established through size, not weight.",
+    "Implement the 'Quick Action Launcher' on the Home screen as a horizontal scrolling list of circular/rounded chips with icons and notification dots.",
+    "For the Directory list, implement 'ElevatedCards' containing a left-aligned avatar, text block in the middle, and bottom row reserved for Quick Actions (Call/WhatsApp).",
+    "Where business phone numbers are gated, display a lock icon and 'Unlock with plan' text instead of hiding the action completely.",
+    "Global navigation: Build a persistent top bar featuring the user avatar and notification bell (with unread dot). Construct the bottom tab bar with an active state pill indicator.",
+    "When applying text over the Hero Event banner, use a vertical gradient scrim (transparent to surfaceInverse) to guarantee WCAG contrast."
+  ]
+}

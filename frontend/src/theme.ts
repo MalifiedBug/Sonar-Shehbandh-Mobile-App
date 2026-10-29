@@ -76,11 +76,55 @@ export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
 
 type NamedStyles<T> = { [P in keyof T]: ViewStyle | TextStyle | ImageStyle };
 
+// Plus Jakarta Sans, one file per weight (Android can't synthesize weights for custom fonts).
+export const FONTS = {
+  400: "PlusJakartaSans-Regular",
+  500: "PlusJakartaSans-Medium",
+  600: "PlusJakartaSans-SemiBold",
+  700: "PlusJakartaSans-Bold",
+  800: "PlusJakartaSans-ExtraBold",
+} as const;
+
+export const FONT_FILES = {
+  [FONTS[400]]: require("../assets/fonts/PlusJakartaSans-Regular.ttf"),
+  [FONTS[500]]: require("../assets/fonts/PlusJakartaSans-Medium.ttf"),
+  [FONTS[600]]: require("../assets/fonts/PlusJakartaSans-SemiBold.ttf"),
+  [FONTS[700]]: require("../assets/fonts/PlusJakartaSans-Bold.ttf"),
+  [FONTS[800]]: require("../assets/fonts/PlusJakartaSans-ExtraBold.ttf"),
+};
+
+// Any text style (has fontSize/fontWeight) gets the matching Plus Jakarta Sans file automatically.
+function withFont(style: any) {
+  if (!style || typeof style !== "object" || style.fontFamily || !("fontSize" in style || "fontWeight" in style)) return style;
+  const { fontWeight, ...rest } = style;
+  const w = fontWeight === "bold" ? 700 : fontWeight === "normal" || !fontWeight ? 400 : Number(fontWeight);
+  const key = Math.min(800, Math.max(400, Math.round(w / 100) * 100)) as keyof typeof FONTS;
+  return { ...rest, fontFamily: FONTS[key] };
+}
+
+export function font(weight: keyof typeof FONTS = 400) {
+  return { fontFamily: FONTS[weight] };
+}
+
+// Soft elevation used for cards across the app.
+export const elevation = {
+  shadowColor: "#0A2540",
+  shadowOpacity: 0.07,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+};
+
 export function makeStyles<T extends NamedStyles<T> | NamedStyles<any>>(
   factory: (colors: ThemeColors) => T & NamedStyles<any>,
 ): () => T {
   return function useStyles(): T {
     const { colors } = useTheme();
-    return useMemo(() => StyleSheet.create(factory(colors)), [colors]);
+    return useMemo(() => {
+      const raw: any = factory(colors);
+      const out: any = {};
+      for (const k of Object.keys(raw)) out[k] = withFont(raw[k]);
+      return StyleSheet.create(out);
+    }, [colors]);
   };
 }

@@ -69,7 +69,7 @@ export default function Matrimony() {
 
   return (
     <View style={s.root}>
-      <Header title="Matrimony / वधू-वर सूचक" subtitle={`${data?.length ?? 0} profiles · ${short.size} shortlisted`} />
+      <Header hideBack title="Matrimony / वधू-वर सूचक" subtitle={`${data?.length ?? 0} profiles · ${short.size} shortlisted`} />
       <View style={s.top}>
         <Pressable style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]} onPress={() => setTerms("matrimony")} testID="matrimony-add-profile-button">
           <Icon name="account-heart" size={20} color={colors.white} />

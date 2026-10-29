@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { makeStyles, useTheme } from "@/src/theme";
+import { elevation, makeStyles, useTheme } from "@/src/theme";
 import { api, useLoad } from "@/src/api";
 import { Chip, Empty, Header, Icon } from "@/src/components/ui";
+import { Badge, Card, ContactActions, SkeletonCard } from "@/src/components/kit";
 import { RemoteImage } from "@/src/components/photo";
 import { TermsModal } from "@/src/components/TermsModal";
 import { Reg } from "@/src/components/RegistrationView";
@@ -17,6 +18,14 @@ const REGISTER_LABEL: Record<string, string> = {
   social_worker: "Add Yourself as Social Worker / समाजसेवक म्हणून नोंदणी",
   matrimony: "Add Matrimony Profile / बायोडाटा जोडा",
 };
+
+// Which saved fields hold the phone / WhatsApp numbers for each directory.
+function contactOf(type: string, d: Record<string, any>): { phone?: string; whatsapp?: string } {
+  if (type === "business") return { phone: d.phone1, whatsapp: d.whatsapp };
+  if (type === "social_worker") return { phone: d.phone, whatsapp: d.whatsapp };
+  if (type === "member") return { phone: d.primary_mobile, whatsapp: d.whatsapp };
+  return {};
+}
 
 export default function Directory() {
   const { type } = useLocalSearchParams<{ type: string }>();
@@ -46,7 +55,7 @@ export default function Directory() {
 
   return (
     <View style={s.root}>
-      <Header title={def.dirTitle} subtitle={`${data?.length ?? 0} approved ${data?.length === 1 ? "listing" : "listings"} / मंजूर नोंदी`} />
+      <Header title={def.dirTitle} subtitle={loading ? "Loading… / लोड होत आहे" : `${data?.length ?? 0} approved ${data?.length === 1 ? "listing" : "listings"} / मंजूर नोंदी`} />
       <View style={s.ctaWrap}>
         <Pressable style={({ pressed }) => [s.cta, pressed && { opacity: 0.85 }]} onPress={() => setTerms(type as TermsKind)} testID="directory-register-button">
           <Icon name={type === "social_worker" ? "account-plus" : type === "business" ? "store-plus" : "plus-circle"} size={20} color={colors.white} />
@@ -76,30 +85,49 @@ export default function Directory() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.brand} style={{ marginTop: 48 }} />
+        <View style={{ padding: 16, gap: 10 }}>{[0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)}</View>
       ) : (
         <FlatList
           data={data ?? []}
           keyExtractor={(r) => r.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 10 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={colors.brand} />}
-          ListEmptyComponent={<Empty text={error ?? (dq || caste || cat ? "No matches found. Try a different search. / जुळणारे निकाल नाहीत" : "No approved listings yet. Be the first to register! / अद्याप नोंदी नाहीत")} testID="directory-empty" />}
-          renderItem={({ item }) => (
-            <Pressable style={({ pressed }) => [s.item, pressed && { opacity: 0.85 }]} onPress={() => router.push(`/detail/${item.id}` as any)} testID={`directory-item-${item.id}`}>
-              {photoKey && item.photos?.[photoKey] ? (
-                <RemoteImage path={item.photos[photoKey].path} zoom={item.photos[photoKey].zoom} style={s.avatar} />
-              ) : (
-                <View style={[s.avatar, s.avatarEmpty]}><Icon name="account" size={28} color={colors.borderStrong} /></View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={s.title} numberOfLines={1}>{(item as any).featured ? "★ " : ""}{item.title}</Text>
-                {(item as any).featured ? <Text style={s.featured} testID={`directory-featured-${item.id}`}>FEATURED</Text> : null}
-                {def.subtitle(item.data) ? <Text style={s.sub} numberOfLines={1}>{def.subtitle(item.data)}</Text> : null}
-                {item.sub_caste ? <Text style={s.caste} numberOfLines={1}>{englishPart(item.sub_caste)}</Text> : null}
-              </View>
-              <Icon name="chevron-right" size={22} color={colors.muted} />
-            </Pressable>
-          )}
+          ListEmptyComponent={
+            <View>
+              <Empty text={error ?? (dq || caste || cat ? "No matches found. Try a different search. / जुळणारे निकाल नाहीत" : "No approved listings yet. Be the first to register! / अद्याप नोंदी नाहीत")} testID="directory-empty" />
+              {dq || caste || cat ? (
+                <Pressable onPress={() => { setQ(""); setCaste(""); setCat(""); }} style={s.clear} testID="directory-clear-filters">
+                  <Text style={s.clearText}>Clear filters</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          }
+          renderItem={({ item }) => {
+            const c = contactOf(type!, item.data ?? {});
+            return (
+              <Card onPress={() => router.push(`/detail/${item.id}` as any)} testID={`directory-item-${item.id}`}>
+                <View style={s.itemRow}>
+                  {photoKey && item.photos?.[photoKey] ? (
+                    <RemoteImage path={item.photos[photoKey].path} zoom={item.photos[photoKey].zoom} style={s.avatar} />
+                  ) : (
+                    <View style={[s.avatar, s.avatarEmpty]}><Icon name={type === "business" ? "storefront-outline" : "account"} size={28} color={colors.borderStrong} /></View>
+                  )}
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={s.title} numberOfLines={1}>{item.title}</Text>
+                    {def.subtitle(item.data) ? <Text style={s.sub} numberOfLines={1}>{def.subtitle(item.data)}</Text> : null}
+                    <View style={s.badges}>
+                      <Badge label={type === "business" ? "Local Partner" : "Verified"} icon="check-decagram" tone="success" />
+                      {(item as any).featured ? <Badge label="Featured" icon="star" tone="gold" testID={`directory-featured-${item.id}`} /> : null}
+                      {item.sub_caste ? <Badge label={englishPart(item.sub_caste)} tone="brand" /> : null}
+                      {item.data?.blood_group ? <Badge label={`Blood: ${item.data.blood_group}`} icon="water" tone="error" /> : null}
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={22} color={colors.muted} />
+                </View>
+                <ContactActions phone={c.phone} whatsapp={c.whatsapp} locked={(item as any).locked} testID={`directory-item-${item.id}`} />
+              </Card>
+            );
+          }}
         />
       )}
       <TermsModal kind={terms} onClose={() => setTerms(null)} />
@@ -110,18 +138,19 @@ export default function Directory() {
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
   ctaWrap: { paddingHorizontal: 16, paddingTop: 12 },
-  cta: { minHeight: 48, borderRadius: 12, backgroundColor: c.brandPrimary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+  cta: { minHeight: 48, borderRadius: 14, backgroundColor: c.brandPrimary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12, ...elevation },
   ctaText: { color: c.white, fontWeight: "800", fontSize: 14 },
   searchWrap: { paddingHorizontal: 16, paddingTop: 12 },
-  search: { flexDirection: "row", alignItems: "center", gap: 8, height: 48, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.white, paddingHorizontal: 12 },
-  searchInput: { flex: 1, fontSize: 15, color: c.onSurface, height: 48 },
-  chipRow: { height: 56, justifyContent: "center" },
+  search: { flexDirection: "row", alignItems: "center", gap: 8, height: 48, borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.white, paddingHorizontal: 12 },
+  searchInput: { flex: 1, fontSize: 15, color: c.onSurface, height: 48, ...({ outlineStyle: "none" } as any) },
+  chipRow: { height: 52, justifyContent: "center" },
   chips: { gap: 8, paddingHorizontal: 16, alignItems: "center" },
-  item: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
-  avatar: { width: 56, height: 56, borderRadius: 28 },
+  itemRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 60, height: 60, borderRadius: 30 },
   avatarEmpty: { backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 15, fontWeight: "800", color: c.onSurface },
-  sub: { fontSize: 13, color: c.onSurfaceTertiary, marginTop: 2 },
-  caste: { fontSize: 12, color: c.brand, marginTop: 2, fontWeight: "600" },
-  featured: { alignSelf: "flex-start", marginTop: 2, fontSize: 10, fontWeight: "800", color: c.white, backgroundColor: c.gold, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
+  title: { fontSize: 15.5, fontWeight: "800", color: c.onSurface, letterSpacing: -0.2 },
+  sub: { fontSize: 12.5, color: c.onSurfaceTertiary },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 },
+  clear: { alignSelf: "center", height: 40, paddingHorizontal: 18, borderRadius: 20, borderWidth: 1, borderColor: c.brandPrimary, justifyContent: "center" },
+  clearText: { fontSize: 13, fontWeight: "700", color: c.brandPrimary },
 }));

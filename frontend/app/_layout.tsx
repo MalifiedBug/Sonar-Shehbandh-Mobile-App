@@ -13,7 +13,7 @@ import { ErrorBoundary } from "@/src/components/error-boundary";
 import { queryClient } from "@/src/query-client";
 import { AuthProvider, useAuth } from "@/src/auth";
 import { ToastProvider, Btn, Sheet } from "@/src/components/ui";
-import { colors } from "@/src/theme";
+import { colors, FONT_FILES, FONTS } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 import { Notifications } from "@/src/notifications";
 import { registerForPush } from "@/src/push";
@@ -140,6 +140,7 @@ export default function RootLayout() {
   // Prewarm the icon font so icons render on first paint (Expo Go Android fix).
   const [fontsLoaded] = useFonts({
     MaterialDesignIcons: require("@react-native-vector-icons/material-design-icons/fonts/MaterialDesignIcons.ttf"),
+    ...FONT_FILES,
   });
 
   return (
@@ -169,6 +170,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surface },
   center: { alignItems: "center", justifyContent: "center" },
-  nudgeText: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceSecondary, marginBottom: 16 },
+  nudgeText: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceSecondary, marginBottom: 16, fontFamily: FONTS[400] },
   nudgeBtns: { flexDirection: "row", gap: 8 },
 });
