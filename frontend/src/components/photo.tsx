@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import Slider from "@react-native-community/slider";
 import * as ImagePicker from "expo-image-picker";
@@ -29,7 +29,6 @@ export function PhotoPicker({ spec, value, onChange, testID }: { spec: PhotoSpec
   const { colors } = useTheme();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [perm, setPerm] = useState<"ok" | "explain" | "blocked">("ok");
   const d = DIMS[spec.shape];
 
   const launch = async () => {
@@ -52,17 +51,8 @@ export function PhotoPicker({ spec, value, onChange, testID }: { spec: PhotoSpec
     }
   };
 
-  const pick = async () => {
-    if (Platform.OS === "web") return launch();
-    const cur = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (cur.granted) { setPerm("ok"); return launch(); }
-    setPerm(cur.canAskAgain ? "explain" : "blocked");
-  };
-
-  const request = async () => {
-    const r = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (r.granted) { setPerm("ok"); launch(); } else setPerm(r.canAskAgain ? "explain" : "blocked");
-  };
+  // The system photo picker (Android Photo Picker / iOS PHPicker) needs no storage permission.
+  const pick = () => launch();
 
   return (
     <View style={s.wrap}>
@@ -79,17 +69,6 @@ export function PhotoPicker({ spec, value, onChange, testID }: { spec: PhotoSpec
         {busy ? <View style={s.busy}><ActivityIndicator color={colors.white} /></View> : null}
         {value && !busy ? <View style={s.editDot}><Icon name="camera" size={14} color={colors.white} /></View> : null}
       </Pressable>
-      {perm === "explain" ? (
-        <View style={s.perm}>
-          <Text style={s.permText}>Allow photo access to add your picture. / फोटो जोडण्यासाठी परवानगी द्या.</Text>
-          <Pressable onPress={request} style={s.permBtn} testID={`${testID}-allow`}><Text style={s.permBtnText}>Allow / परवानगी द्या</Text></Pressable>
-        </View>
-      ) : perm === "blocked" ? (
-        <View style={s.perm}>
-          <Text style={s.permText}>Photo access is off. Turn it on in Settings. / सेटिंग्जमध्ये परवानगी द्या.</Text>
-          <Pressable onPress={() => Linking.openSettings()} style={s.permBtn} testID={`${testID}-settings`}><Text style={s.permBtnText}>Open Settings / सेटिंग्ज</Text></Pressable>
-        </View>
-      ) : null}
       {spec.shape === "circle" && value ? (
         <View style={s.zoomRow}>
           <Icon name="magnify-minus-outline" size={20} color={colors.muted} />
@@ -123,8 +102,4 @@ const useStyles = makeStyles((c) => ({
   editDot: { position: "absolute", right: 6, bottom: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" },
   zoomRow: { flexDirection: "row", alignItems: "center", gap: 8, width: "100%", maxWidth: 320, marginTop: 4 },
   zoomText: { width: 40, fontSize: 13, fontWeight: "700", color: c.brand, textAlign: "right" },
-  perm: { marginTop: 8, padding: 12, borderRadius: 10, backgroundColor: c.goldSoft, width: "100%", gap: 8, alignItems: "center" },
-  permText: { fontSize: 12, color: c.onSurfaceSecondary, textAlign: "center" },
-  permBtn: { minHeight: 40, paddingHorizontal: 16, borderRadius: 10, backgroundColor: c.brand, justifyContent: "center" },
-  permBtnText: { color: c.onBrand, fontWeight: "700", fontSize: 13 },
 }));

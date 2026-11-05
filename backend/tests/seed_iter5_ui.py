@@ -14,5 +14,5 @@ requests.post(f"{API}/admin/registrations/{b}/approve", headers=H(admin), timeou
 db("insert into sonar.subscriptions (user_id, plan, expires_at) values ($1, 'platinum', now() + interval '365 days') "
    "on conflict (user_id) do update set plan='platinum', expires_at = excluded.expires_at", oid)
 vu = f"test_uiv{uuid.uuid4().hex[:6]}"
-requests.post(f"{API}/auth/signup", json={"username": vu, "name": "TEST UI Viewer", "password": "secret123"}, timeout=60)
+requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": vu, "name": "TEST UI Viewer", "password": "secret123"}, timeout=60)
 print(json.dumps({"owner_id": oid, "matrimony_id": mid, "business_id": b, "viewer": vu}))

@@ -3,7 +3,7 @@ import os, io, uuid, json, requests
 API = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/") + "/api"
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
 uname = f"test_pf_{uuid.uuid4().hex[:6]}"
-t = requests.post(f"{API}/auth/signup", json={"username": uname, "name": "TEST Account Name", "password": "secret123"}).json()["token"]
+t = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": uname, "name": "TEST Account Name", "password": "secret123"}).json()["token"]
 H = {"Authorization": f"Bearer {t}"}
 av = requests.post(f"{API}/upload", headers=H, files={"file": ("a.png", io.BytesIO(PNG), "image/png")}).json()["path"]
 r = requests.post(f"{API}/registrations", headers=H, json={"type": "member", "title": "TEST Member Prefill", "sub_caste": "Ahir", "photos": {"avatar": {"path": av, "zoom": 1}},

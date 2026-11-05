@@ -4,6 +4,9 @@ import { useFocusEffect } from "expo-router";
 
 export const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+// Public legal pages (also the URLs to enter in Google Play Console).
+export const legalUrl = (page: "privacy" | "terms" | "account-deletion") => `${BACKEND}/api/legal/${page}`;
+
 let token: string | null = null;
 export const setToken = (t: string | null) => {
   token = t;

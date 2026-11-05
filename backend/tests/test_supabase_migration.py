@@ -20,7 +20,7 @@ def H(t):
 
 def signup(prefix="test_sb"):
     u = f"{prefix}_{uuid.uuid4().hex[:8]}"
-    r = requests.post(f"{API}/auth/signup", json={"username": u, "password": "test123", "name": "TEST " + u})
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": u, "password": "test123", "name": "TEST " + u})
     assert r.status_code == 200, r.text
     return r.json()["token"], r.json()["user"]
 
@@ -61,11 +61,11 @@ class TestAuth:
         print("admin id:", me["id"])
 
     def test_signup_duplicate_409(self, owner):
-        r = requests.post(f"{API}/auth/signup", json={"username": owner[1]["username"], "password": "test123", "name": "x"})
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": owner[1]["username"], "password": "test123", "name": "x"})
         assert r.status_code == 409
 
     def test_duplicate_case_insensitive(self, owner):
-        r = requests.post(f"{API}/auth/signup", json={"username": owner[1]["username"].upper(), "password": "test123", "name": "x"})
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": owner[1]["username"].upper(), "password": "test123", "name": "x"})
         print("uppercase dup status:", r.status_code)
         assert r.status_code in (409, 400)
 
@@ -86,7 +86,7 @@ class TestStorage:
         assert r.status_code == 200, r.text
         p = r.json()["path"]
         assert p.endswith(".jpg")
-        g = requests.get(f"{API}/files/{p}", params={"token": owner[0]})
+        g = requests.get(f"{API}/files/{p}", headers={"Authorization": f"Bearer {owner[0]}"})
         assert g.status_code == 200 and g.content == JPG
         assert g.headers["content-type"].startswith("image/jpeg")
 
@@ -100,7 +100,7 @@ class TestStorage:
         assert requests.get(f"{API}/files/{p}").status_code == 401
 
     def test_nonexistent_404(self, owner):
-        assert requests.get(f"{API}/files/sonar-shehbandh/uploads/x/nope.png", params={"token": owner[0]}).status_code == 404
+        assert requests.get(f"{API}/files/sonar-shehbandh/uploads/x/nope.png", headers={"Authorization": f"Bearer {owner[0]}"}).status_code == 404
 
     def test_non_image_rejected(self, owner):
         r = upload(owner[0], b"hello", "text/plain", "a.txt")
@@ -112,14 +112,14 @@ class TestStorage:
 
     def test_pending_photo_hidden_then_visible(self, owner, other, admin):
         p = upload(owner[0]).json()["path"]
-        assert requests.get(f"{API}/files/{p}", params={"token": other[0]}).status_code == 404
+        assert requests.get(f"{API}/files/{p}", headers={"Authorization": f"Bearer {other[0]}"}).status_code == 404
         reg = requests.post(f"{API}/registrations", headers=H(owner[0]),
                             json=member_payload("TEST_SB Photo Member", {"photo": {"path": p}})).json()
-        assert requests.get(f"{API}/files/{p}", params={"token": other[0]}).status_code == 404
-        assert requests.get(f"{API}/files/{p}", params={"token": admin["token"]}).status_code == 200
+        assert requests.get(f"{API}/files/{p}", headers={"Authorization": f"Bearer {other[0]}"}).status_code == 404
+        assert requests.get(f"{API}/files/{p}", headers={"Authorization": "Bearer " + admin["token"]}).status_code == 200
         a = requests.post(f"{API}/admin/registrations/{reg['id']}/approve", headers=H(admin["token"]))
         assert a.status_code == 200
-        g = requests.get(f"{API}/files/{p}", params={"token": other[0]})
+        g = requests.get(f"{API}/files/{p}", headers={"Authorization": f"Bearer {other[0]}"})
         assert g.status_code == 200 and g.content == PNG
         requests.delete(f"{API}/admin/registrations/{reg['id']}", headers=H(admin["token"]))
 

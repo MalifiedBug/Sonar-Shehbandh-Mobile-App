@@ -22,7 +22,7 @@ def admin_token():
 @pytest.fixture(scope="session")
 def user():
     uname = f"test_{uuid.uuid4().hex[:8]}"
-    r = requests.post(f"{API}/auth/signup", json={"username": uname, "name": "TEST User", "password": "secret123"})
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": uname, "name": "TEST User", "password": "secret123"})
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["user"]["username"] == uname and d["user"]["role"] == "user"
@@ -47,11 +47,11 @@ class TestAuth:
         assert r.status_code == 401
 
     def test_signup_duplicate(self, user):
-        r = requests.post(f"{API}/auth/signup", json={"username": user["username"], "name": "x", "password": "secret123"})
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": user["username"], "name": "x", "password": "secret123"})
         assert r.status_code == 409
 
     def test_signup_short_pw(self):
-        r = requests.post(f"{API}/auth/signup", json={"username": "test_short", "name": "x", "password": "123"})
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": "test_short", "name": "x", "password": "123"})
         assert r.status_code == 422
 
     def test_login_user(self, user):

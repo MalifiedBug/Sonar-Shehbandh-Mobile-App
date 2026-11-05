@@ -23,7 +23,7 @@ def admin_token():
 
 @pytest.fixture(scope="module")
 def user_token():
-    r = requests.post(f"{API}/auth/signup", json={"username": f"test_{uuid.uuid4().hex[:8]}", "name": "TEST Shortlister", "password": "secret123"}, timeout=T)
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": f"test_{uuid.uuid4().hex[:8]}", "name": "TEST Shortlister", "password": "secret123"}, timeout=T)
     assert r.status_code == 200, r.text
     return r.json()["token"]
 

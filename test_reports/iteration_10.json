@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 10 (Play Store compliance, backend + frontend). Tested on the preview URL at 375x667. BACKEND: a new suite test_iter10_compliance.py passed 14/14. (1) DELETE /api/users/me returns 200 for a normal user. Afterwards the old token gets 401 on /auth/me and login returns 401. The user's registrations (member + approved matrimony) return 404 even for admin. The other user's shortlist of the deleted matrimony profile is gone. No rows are left for that user id in notifications, complaints, payments, subscriptions or sonar.files. All 4 uploaded photos return 404 from /api/files as admin, and the Supabase storage objects are really removed (storage.get_object raises). Admin gets 400 and stays valid. Unauthenticated gets 401. (2) /api/legal/privacy, /terms and /account-deletion return public HTML 200. (3) Signup without accepted_terms, or with false, returns 422; with true it returns 200. (4) Masking: for a free user AND a platinum-plan user, gst, udyam_no and shop_act_no (business) and emergency_name, emergency_relation and emergency_phone (member) are absent in both the list and the detail. Owner and admin see them. A plan user still sees business phone1. Regression: the full tests/ run gave 114 passed, 3 failed, 1 error, 1 skipped. The 3 failures were stale tests in test_supabase_migration.py TestStorage that passed the login token as ?token= (rejected since iter8). I fixed them to use the Authorization header and they now pass 8/8. The 1 error was a test-teardown DB connect hitting Supabase EMAXCONNSESSION (pool limit 15); it was transient. FRONTEND: the Sign Up tab shows signup-consent-checkbox. Create Account is aria-disabled and the tap is ignored until the box is checked. signup-terms-link and signup-privacy-link open /api/legal/terms and /api/legal/privacy in a new tab. Signup then lands on Home. Profile shows profile-privacy-policy (opens the policy) and profile-terms. profile-delete-account-button opens delete-account-sheet. delete-account-confirm stays disabled for an empty or lowercase 'delete' and is enabled for 'DELETE'. Cancel resets the input. Confirm shows the toast 'Your account has been deleted', returns to /login, and logging in again shows 'Invalid username or password'. For admin the Delete row is hidden but the Privacy/Terms rows show. Detail screen: a plan viewer sees no GST/Udyam/Shop Act rows and no Emergency Contact section; owner and admin see them. Regression: login, the 5 bottom tabs, session kept after reload, and the photo pick on /register/member on web (file chooser, upload, zoom slider) all work. The push disclosure sheet was code-reviewed only (native only). It shows before requestPermissionsAsync and registerForPush never prompts. app.json blocks READ_MEDIA_IMAGES/VIDEO. No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/legal/account-deletion", "issue": "PRIVACY_CONTACT_EMAIL is not set in backend/.env. The 'Can't open the app?' section therefore only says to use the in-app Complaints screen, which needs the app and a login. Google Play requires a way to request deletion without the app. Set a contact email (or add a web request form)."},
+      {"endpoint": "DELETE /api/users/me", "issue": "Supabase storage removal happens first, and failures are only logged; the sonar.files rows are then deleted anyway. If removal fails, the objects are orphaned with no record left to retry from. If the user delete fails after removal, the photos are gone but the account remains. Consider deleting DB rows in a transaction and queueing or retrying storage removal."},
+      {"endpoint": "POST /api/auth/signup", "issue": "Consent is validated but not stored. There is no accepted_terms_at or terms version on sonar.users, so there is no audit trail of consent."},
+      {"endpoint": "DB pool (infra)", "issue": "The Supabase session-mode pooler allows only 15 clients, and the backend pool max_size is 12. Parallel load or tests cause EMAXCONNSESSION 500s (seen earlier in backend.err.log). Consider the transaction pooler (port 6543) or a smaller max_size."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login / Sign Up", "issues": ["The signup-terms-link and signup-privacy-link Text links are about 16px tall. With hitSlop 8 the touch area is about 32px, below the 44px minimum. Add padding or minHeight 44."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_compliance.py",
+    "/app/backend/tests/seed_iter10_ui.py",
+    "/app/test_reports/pytest/iter10_compliance.xml",
+    "/app/test_reports/pytest/iter10_full.xml"
+  ],
+  "action_items": [
+    "Set PRIVACY_CONTACT_EMAIL in backend/.env (or add a public web deletion-request form) so /api/legal/account-deletion offers a way to request deletion without the app, as Play policy requires.",
+    "Optional: store a consent timestamp/version at signup.",
+    "Optional: make account deletion robust (DB transaction first, then storage cleanup with retry).",
+    "Optional: enlarge the touch targets of the Terms/Privacy links on Sign Up to 44px or more."
+  ],
+  "critical_code_review_comments": [
+    "hide_private is applied in both list_registrations and get_registration. /registrations/mine (owner) and /admin/* (admin) are unaffected, which is correct. /shortlist returns ids only, so nothing leaks there.",
+    "ON DELETE CASCADE exists on registrations, files, complaints, notifications, shortlists (both user_id and registration_id), payments and subscriptions. Verified via DB counts after deletion.",
+    "legal.py has UPDATED = 'June 2026' hardcoded; remember to update it when the policy changes.",
+    "The account-deletion page says the push device link is removed, but the backend does not unregister the token at the relay; it relies on the user row being gone. This is acceptable but slightly overstated.",
+    "server.py is 947 lines (over 700); consider splitting into modules (auth, registrations, posts, notifications)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_compliance.py (new)",
+    "/app/backend/tests/seed_iter10_ui.py (new)",
+    "/app/backend/tests/*.py signup calls now send accepted_terms: True (seed_iter5_ui, seed_prefill_user, test_iter4_features, test_iter8_security, test_notifications, test_payments, test_sonar_api, test_supabase_migration)",
+    "/app/backend/tests/test_supabase_migration.py TestStorage: the stale ?token=<login token> was changed to the Authorization header"
+  ],
+  "success_rate": {"backend": "100% of the new compliance tests (14/14); regression 117/118 after the stale-test fix (1 transient infra error)", "frontend": "100% of the requested flows"},
+  "seed_data_creation": "Created TEST_ users, registrations, payments, subscriptions, notifications and complaints. All were removed by id (module teardown, seed_iter10_ui.py cleanup, and in-app deletion of the UI users test_uie62c3f and test_ui0ccc4e). Verified 0 leftovers. admin and inbox_user were not modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use https://sonar-shehbandh.preview.emergentagent.com and export EXPO_PUBLIC_BACKEND_URL. Every signup must send accepted_terms: true. To seed, run `python seed_iter10_ui.py seed|cleanup` in backend/tests; it creates an owner and a platinum viewer with an approved business and member that carry owner-only fields (/tmp/iter10_ui.json). On register/member the photo testID is photo-avatar. Tab testIDs are tab-index, tab-community, tab-matrimony, tab-notifications and tab-profile. Btn disabled state is exposed as aria-disabled='true' (is_disabled() is always False on web). Running the full suite alongside UI tests can exhaust the Supabase pooler (15 clients).",
+  "rca_of_issue": ""
+}

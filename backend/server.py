@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File, Query, Header
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Header
+from fastapi.responses import HTMLResponse
 from fastapi.responses import Response
 from fastapi.concurrency import run_in_threadpool
 from dotenv import load_dotenv
@@ -24,6 +25,7 @@ load_dotenv(ROOT_DIR / '.env')
 import database as pg  # noqa: E402
 import storage  # noqa: E402
 import payments  # noqa: E402
+import legal  # noqa: E402
 
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
@@ -201,6 +203,14 @@ class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=6, max_length=200)
     remember: bool = True
+    accepted_terms: bool = Field(default=False, validate_default=True)  # explicit consent to Terms & Privacy Policy
+
+    @field_validator("accepted_terms")
+    @classmethod
+    def _consent(cls, v: bool) -> bool:
+        if not v:
+            raise ValueError("Please accept the Terms of Service and Privacy Policy / अटी व गोपनीयता धोरण मान्य करा")
+        return v
 
     @field_validator("password")
     @classmethod
@@ -262,8 +272,8 @@ async def signup(body: SignupIn):
         raise HTTPException(400, "Username may contain only letters, numbers, _ and .")
     try:
         row = await pg.fetchrow(
-            "insert into sonar.users (id, username, name, password_hash, role, created_at) "
-            "values ($1, $2, $3, $4, 'user', $5) returning *",
+            "insert into sonar.users (id, username, name, password_hash, role, created_at, accepted_terms_at) "
+            "values ($1, $2, $3, $4, 'user', $5, now()) returning *",
             pg.new_id(), uname, body.name.strip(), hash_pw(body.password), pg.now())
     except asyncpg.UniqueViolationError:
         raise HTTPException(409, "Username already taken")
@@ -303,6 +313,51 @@ async def logout(user: User = Depends(current_user)):
     # Revokes every token issued to this user (all devices).
     await pg.execute("update sonar.users set token_version = token_version + 1 where id = $1", user.id)
     return {"ok": True}
+
+
+@api.delete("/users/me")
+async def delete_me(user: User = Depends(current_user)):
+    """Permanently deletes the account and everything linked to it (Play Store account-deletion policy)."""
+    if user.role == "admin":
+        raise HTTPException(400, "Committee admin accounts can't be deleted from the app. / ॲडमिन खाते येथे हटवता येत नाही.")
+    await purge_user(user.id)
+    return {"ok": True}
+
+
+async def purge_user(user_id: str) -> None:
+    paths = [r["storage_path"] for r in await pg.fetch("select storage_path from sonar.files where owner_id = $1", user_id)]
+    for i in range(0, len(paths), 100):
+        chunk = paths[i:i + 100]
+        try:
+            await run_in_threadpool(lambda: storage.client().storage.from_(storage.BUCKET).remove(chunk))
+        except Exception as e:
+            logger.error(f"Storage cleanup failed for {user_id}, orphaned paths: {chunk}: {e}")
+    await pg.execute("delete from sonar.files where owner_id = $1", user_id)
+    # registrations, shortlists (incl. others' shortlists of these profiles), notifications, complaints,
+    # payments and subscriptions are removed by ON DELETE CASCADE.
+    await pg.execute("delete from sonar.users where id = $1", user_id)
+    # Push: the device token is bound to this user id at the relay; with the user gone, nothing is ever sent to it again.
+    logger.info(f"Account deleted: {user_id}")
+
+
+@api.post("/legal/delete-account", response_class=HTMLResponse)
+async def delete_account_web(username: str = Form(...), password: str = Form(...), confirm: str = Form("")):
+    """Public web form (no app needed): verify username + password, then delete. Same lockout rules as login."""
+    def page(msg: str, ok: bool = False) -> HTMLResponse:
+        color = "#2E7D32" if ok else "#D32F2F"
+        return HTMLResponse(f'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+                            f'<body style="font:16px sans-serif;background:#FBF7EE;padding:32px"><p style="color:{color};font-weight:700">{msg}</p>'
+                            f'<a href="account-deletion">Back</a></body>', status_code=200 if ok else 400)
+    if confirm.strip() != "DELETE":
+        return page("Please type DELETE to confirm.")
+    try:
+        res = await login(LoginIn(username=username[:60], password=password[:200]))
+    except HTTPException as e:
+        return page(str(e.detail))
+    if res["user"]["role"] == "admin":
+        return page("Committee admin accounts can't be deleted here.")
+    await purge_user(res["user"]["id"])
+    return page("Your account and all its data have been permanently deleted.", ok=True)
 
 
 @api.get("/auth/me")
@@ -439,6 +494,16 @@ def reg_out(r: Registration) -> dict:
     return r.out()
 
 
+# Government IDs and third-party emergency contacts: only the owner and the committee (admins) may see them.
+OWNER_ONLY_KEYS = {"business": {"gst", "udyam_no", "shop_act_no"}, "member": {"emergency_name", "emergency_relation", "emergency_phone"}}
+
+
+def hide_private(r: Registration, user: "User") -> None:
+    keys = OWNER_ONLY_KEYS.get(r.type)
+    if keys and r.owner_id != user.id and user.role != "admin":
+        r.data = {k: v for k, v in r.data.items() if k not in keys}
+
+
 PHONE_KEYS = {
     "member": ["primary_mobile", "alternate_mobile", "whatsapp", "emergency_phone"],
     "business": ["phone1", "phone2", "whatsapp"],
@@ -531,6 +596,8 @@ async def list_registrations(type: str, q: str = "", sub_caste: str = "", catego
         for r in regs:
             if r.owner_id != user.id:
                 lock_reg(r)
+    for r in regs:
+        hide_private(r, user)
     return [reg_out(r) for r in regs]
 
 
@@ -551,6 +618,7 @@ async def get_registration(rid: str, user: User = Depends(current_user)):
     # Full matrimony biodata and business contacts need any paid plan (owner and admins always see everything).
     if reg.type in ("matrimony", "business") and reg.owner_id != user.id and user.role != "admin" and await payments.active_rank(user.id) < 1:
         lock_reg(reg)
+    hide_private(reg, user)
     return reg_out(reg)
 
 
@@ -861,6 +929,7 @@ async def read_one(nid: str, user: User = Depends(current_user)):
 
 
 app.include_router(api)
+app.include_router(legal.router, prefix="/api")
 app.include_router(payments.make_router(current_user))
 
 # Native apps send no Origin header, so CORS only affects the web version: allow our own domains only.

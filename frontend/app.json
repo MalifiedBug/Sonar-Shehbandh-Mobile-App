@@ -20,8 +20,10 @@
         "backgroundColor": "#8B1818"
       },
       "package": "com.emergent.sonarshehbandh.hxexh3",
-      "permissions": [
-        "READ_MEDIA_IMAGES"
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
     "web": {

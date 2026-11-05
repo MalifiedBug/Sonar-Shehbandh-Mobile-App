@@ -9,11 +9,8 @@ export async function registerForPush(userId: string) {
   if (!Notifications || !Device.isDevice) return;
   try {
     const current = await Notifications.getPermissionsAsync();
-    let status = current.status;
-    if (status !== "granted" && current.canAskAgain) {
-      status = (await Notifications.requestPermissionsAsync()).status;
-    }
-    if (status !== "granted") return;
+    // Never trigger the OS prompt here: the in-app disclosure sheet (app/_layout.tsx) asks first.
+    if (current.status !== "granted") return;
     const token = await Notifications.getDevicePushTokenAsync();
     await api("/register-push", {
       method: "POST",

@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
 import { useAuth } from "@/src/auth";
+import { legalUrl } from "@/src/api";
 import { Btn, Checkbox, Chip, Icon } from "@/src/components/ui";
 import { TextField } from "@/src/components/fields";
 
@@ -17,6 +19,7 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -26,7 +29,7 @@ export default function Login() {
     setBusy(true);
     try {
       if (mode === "login") await login(username.trim(), password, remember);
-      else await signup(name.trim(), username.trim(), password, remember);
+      else await signup(name.trim(), username.trim(), password, remember, agreed);
     } catch (e: any) {
       setError(e?.message ?? "Something went wrong");
     } finally {
@@ -34,7 +37,7 @@ export default function Login() {
     }
   };
 
-  const ok = username.trim().length >= 3 && password.length > 0 && (mode === "login" || name.trim().length > 0);
+  const ok = username.trim().length >= 3 && password.length > 0 && (mode === "login" || (name.trim().length > 0 && agreed));
 
   return (
     <KeyboardAwareScrollView
@@ -64,6 +67,16 @@ export default function Login() {
           <Checkbox checked={remember} onToggle={() => setRemember((v) => !v)} label="Remember me for 1 month / मला १ महिना लक्षात ठेवा" testID="login-remember-checkbox" />
           <Text style={s.rememberHint}>{remember ? "You'll stay signed in for 30 days on this device." : "You'll be signed out after 24 hours. / २४ तासांनी लॉग आउट होईल."}</Text>
         </View>
+        {mode === "signup" ? (
+          <View style={s.consent}>
+            <Checkbox checked={agreed} onToggle={() => setAgreed((v) => !v)} label="I agree to the Terms of Service and Privacy Policy / मी अटी व गोपनीयता धोरण मान्य करतो" testID="signup-consent-checkbox" />
+            <View style={s.links}>
+              <Pressable onPress={() => WebBrowser.openBrowserAsync(legalUrl("terms"))} hitSlop={8} testID="signup-terms-link"><Text style={s.link}>Terms of Service</Text></Pressable>
+              <Text style={s.rememberHint}>·</Text>
+              <Pressable onPress={() => WebBrowser.openBrowserAsync(legalUrl("privacy"))} hitSlop={8} testID="signup-privacy-link"><Text style={s.link}>Privacy Policy</Text></Pressable>
+            </View>
+          </View>
+        ) : null}
         {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
         <Btn
           label={mode === "login" ? "Sign In / लॉग इन करा" : "Create Account / खाते तयार करा"}
@@ -89,4 +102,7 @@ const useStyles = makeStyles((c) => ({
   error: { color: c.error, fontSize: 13, marginBottom: 12 },
   remember: { marginBottom: 12 },
   rememberHint: { fontSize: 12, color: c.muted, marginTop: 4, marginLeft: 4 },
+  consent: { marginBottom: 12 },
+  links: { flexDirection: "row", gap: 4, marginLeft: 0, alignItems: "center" },
+  link: { fontSize: 12.5, fontWeight: "700", color: c.brandPrimary, textDecorationLine: "underline", paddingVertical: 12, paddingHorizontal: 4 },
 }));

@@ -13,7 +13,7 @@ def H(t):
 
 def signup(prefix="test_nt"):
     uname = f"{prefix}_{uuid.uuid4().hex[:8]}"
-    r = requests.post(f"{API}/auth/signup", json={"username": uname, "name": "TEST Notif", "password": "secret123"})
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": uname, "name": "TEST Notif", "password": "secret123"})
     assert r.status_code == 200, r.text
     return {"token": r.json()["token"], "id": r.json()["user"]["id"], "username": uname}
 

@@ -61,6 +61,7 @@ function PushHandlers() {
   const router = useRouter();
   const { user } = useAuth();
   const [nudge, setNudge] = useState(false);
+  const [firstAsk, setFirstAsk] = useState(false);
 
   useEffect(() => {
     const N = Notifications;
@@ -69,12 +70,13 @@ function PushHandlers() {
     const sub = N.addNotificationResponseReceivedListener((r) => openFromNotification(router, r));
     // Cold-start tap
     N.getLastNotificationResponseAsync().then((r) => openFromNotification(router, r));
-    // Weekly nudge while notifications are turned off
+    // Prominent disclosure: explain why before the OS prompt (first time), weekly reminder while turned off.
     (async () => {
       const { status } = await N.getPermissionsAsync();
-      if (status !== "denied") return;
+      if (status === "granted") return;
       const last = await storage.getItem<string | null>("pushNudgeAt", null);
       if (last && Date.now() - Number(last) <= 7 * 24 * 60 * 60 * 1000) return;
+      setFirstAsk(status === "undetermined");
       setNudge(true);
     })();
     return () => sub.remove();
@@ -96,13 +98,15 @@ function PushHandlers() {
   };
 
   return (
-    <Sheet visible={nudge} onClose={() => close(false)} title="Turn on notifications / सूचना सुरू करा" testID="push-nudge-sheet">
+    <Sheet visible={nudge} onClose={() => close(false)} title={firstAsk ? "Allow notifications? / सूचना हव्यात?" : "Turn on notifications / सूचना सुरू करा"} testID="push-nudge-sheet">
       <Text style={styles.nudgeText}>
-        Notifications are turned off. Turn them on to get alerts — with a soft flute tune — when your registration is approved and when the committee posts news, events or notices. / सूचना सुरू करा.
+        {firstAsk
+          ? "Sonar Shehbandh sends notifications only for: your registration being approved or rejected, and news, events and notices posted by the committee. We never send ads. You can turn them off anytime in phone settings. / मंजुरी, बातम्या, कार्यक्रम व सूचनांसाठीच सूचना पाठवल्या जातात."
+          : "Notifications are turned off. Turn them on to get alerts — with a soft flute tune — when your registration is approved and when the committee posts news, events or notices. / सूचना सुरू करा."}
       </Text>
       <View style={styles.nudgeBtns}>
-        <Btn label="Later / नंतर" variant="ghost" onPress={() => close(false)} style={{ flex: 1 }} testID="push-nudge-later" />
-        <Btn label="Turn On / सुरू करा" variant="primary" onPress={() => close(true)} style={{ flex: 1 }} testID="push-nudge-settings" />
+        <Btn label="Not now / नंतर" variant="ghost" onPress={() => close(false)} style={{ flex: 1 }} testID="push-nudge-later" />
+        <Btn label={firstAsk ? "Continue / पुढे" : "Turn On / सुरू करा"} variant="primary" onPress={() => close(true)} style={{ flex: 1 }} testID="push-nudge-settings" />
       </View>
     </Sheet>
   );

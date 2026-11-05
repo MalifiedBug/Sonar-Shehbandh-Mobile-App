@@ -33,7 +33,7 @@ def db(sql, *args, kind="execute"):
 
 
 def signup(name):
-    r = requests.post(f"{API}/auth/signup", json={"username": f"test_{uuid.uuid4().hex[:8]}", "name": name, "password": "secret123"}, timeout=T)
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": f"test_{uuid.uuid4().hex[:8]}", "name": name, "password": "secret123"}, timeout=T)
     assert r.status_code == 200, r.text
     j = r.json()
     return j["token"], j["user"]["id"]

@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
 import { useAuth } from "@/src/auth";
-import { api, useLoad } from "@/src/api";
-import { Icon, useToast } from "@/src/components/ui";
+import { api, legalUrl, useLoad } from "@/src/api";
+import { Btn, Icon, Sheet, useToast } from "@/src/components/ui";
+import { TextField } from "@/src/components/fields";
 import { Badge, Card, Initials, Overline } from "@/src/components/kit";
 import { MORE_ITEMS } from "@/src/constants";
 
@@ -36,6 +38,23 @@ export default function Profile() {
   const { data: plans } = useLoad(() => api<PlansRes>("/plans"));
   const plan = plans?.current ? plans.plans.find((p) => p.id === plans.current!.plan) : null;
   const isAdmin = user?.role === "admin";
+  const [confirm, setConfirm] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await api("/users/me", { method: "DELETE" });
+      setConfirm(false);
+      toast("Your account has been deleted / खाते हटवले", "success");
+      await logout();
+    } catch (e: any) {
+      toast(e?.message ?? "Could not delete account", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <ScrollView style={s.root} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 32 }}>
@@ -79,8 +98,27 @@ export default function Profile() {
       </View>
 
       <View style={[s.box, { marginTop: 24 }]}>
-        <Row icon="logout" label="Logout / बाहेर पडा" danger onPress={logout} right={<View />} testID="profile-logout-button" />
+        <Row icon="shield-lock-outline" label="Privacy Policy / गोपनीयता धोरण" onPress={() => WebBrowser.openBrowserAsync(legalUrl("privacy"))} testID="profile-privacy-policy" />
+        <Row icon="file-document-outline" label="Terms of Service / सेवा अटी" onPress={() => WebBrowser.openBrowserAsync(legalUrl("terms"))} testID="profile-terms" />
       </View>
+
+      <View style={[s.box, { marginTop: 24 }]}>
+        <Row icon="logout" label="Logout / बाहेर पडा" danger onPress={logout} right={<View />} testID="profile-logout-button" />
+        {isAdmin ? null : (
+          <Row icon="account-remove-outline" label="Delete Account / खाते हटवा" sub="Permanently remove your account and all data" danger onPress={() => setConfirm(true)} right={<View />} testID="profile-delete-account-button" />
+        )}
+      </View>
+
+      <Sheet visible={confirm} onClose={() => { setConfirm(false); setTyped(""); }} title="Delete account permanently? / खाते कायमचे हटवायचे?" testID="delete-account-sheet">
+        <Text style={s.warn}>
+          This deletes your login, all your registrations (family, matrimony, business, social worker), uploaded photos, shortlists, notifications, complaints and plan records. This cannot be undone. / ही क्रिया परत घेता येणार नाही.
+        </Text>
+        <TextField label="Type DELETE to confirm / पुष्टीसाठी DELETE लिहा" value={typed} onChangeText={setTyped} autoCapitalize="characters" testID="delete-account-confirm-input" />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <Btn label="Cancel / रद्द" variant="ghost" onPress={() => { setConfirm(false); setTyped(""); }} style={{ flex: 1 }} testID="delete-account-cancel" />
+          <Btn label="Delete permanently" variant="danger" loading={deleting} disabled={typed.trim() !== "DELETE"} onPress={deleteAccount} style={{ flex: 1 }} testID="delete-account-confirm" />
+        </View>
+      </Sheet>
     </ScrollView>
   );
 }
@@ -97,4 +135,5 @@ const useStyles = makeStyles((c) => ({
   rowText: { fontSize: 14, fontWeight: "600", color: c.onSurface },
   rowSub: { fontSize: 12, color: c.muted, marginTop: 2 },
   soon: { fontSize: 10.5, fontWeight: "800", color: c.gold, backgroundColor: c.goldSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, overflow: "hidden" },
+  warn: { fontSize: 13.5, lineHeight: 20, color: c.onSurfaceSecondary, marginBottom: 12 },
 }));

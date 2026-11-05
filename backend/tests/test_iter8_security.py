@@ -36,7 +36,7 @@ def db(sql, *args, kind="execute"):
 
 def signup(name, password="secret123"):
     uname = f"test_{uuid.uuid4().hex[:8]}"
-    r = requests.post(f"{API}/auth/signup", json={"username": uname, "name": name, "password": password}, timeout=T)
+    r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": uname, "name": name, "password": password}, timeout=T)
     assert r.status_code == 200, r.text
     j = r.json()
     CREATED_USERS.append(j["user"]["id"])
@@ -260,11 +260,11 @@ class TestLockout:
 # --- bcrypt 72 byte limit
 class TestPasswordLength:
     def test_signup_long_password_422(self):
-        r = requests.post(f"{API}/auth/signup", json={"username": f"test_{uuid.uuid4().hex[:8]}", "name": "X", "password": "a" * 73}, timeout=T)
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": f"test_{uuid.uuid4().hex[:8]}", "name": "X", "password": "a" * 73}, timeout=T)
         assert r.status_code == 422
 
     def test_signup_multibyte_over_72_bytes_422(self):
-        r = requests.post(f"{API}/auth/signup", json={"username": f"test_{uuid.uuid4().hex[:8]}", "name": "X", "password": "अ" * 30}, timeout=T)
+        r = requests.post(f"{API}/auth/signup", json={"accepted_terms": True, "username": f"test_{uuid.uuid4().hex[:8]}", "name": "X", "password": "अ" * 30}, timeout=T)
         assert r.status_code == 422, r.text
 
     def test_signup_72_ok(self):
