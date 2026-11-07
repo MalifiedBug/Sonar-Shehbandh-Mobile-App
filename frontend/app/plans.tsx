@@ -26,7 +26,7 @@ export default function Plans() {
 
   const poll = async (orderId: string) => {
     setChecking(orderId);
-    for (let i = 0; i < 40 && alive.current; i++) {
+    for (let i = 0; i < 100 && alive.current; i++) {
       try {
         const r = await api<{ status: string; subscription: PlansRes["current"] }>(`/payments/${orderId}`);
         if (r.status === "PAID") {
@@ -35,7 +35,7 @@ export default function Plans() {
           setChecking(null);
           return;
         }
-        if (["EXPIRED", "TERMINATED", "AMOUNT_MISMATCH"].includes(r.status)) break;
+        if (["EXPIRED", "AMOUNT_MISMATCH"].includes(r.status)) break;
       } catch {
         // keep trying; network can blip while returning from the browser
       }
@@ -62,7 +62,7 @@ export default function Plans() {
 
   return (
     <View style={s.root}>
-      <Header title="Membership Plans / सदस्यता योजना" subtitle="Support the Sanstha · secure payment by Cashfree" />
+      <Header title="Membership Plans / सदस्यता योजना" subtitle="Secure payment by Razorpay" />
       {loading ? (
         <ActivityIndicator color={colors.brand} style={{ marginTop: 48 }} />
       ) : (
@@ -113,7 +113,7 @@ export default function Plans() {
               </View>
             );
           })}
-          <Text style={s.note}>Payments are processed securely by Cashfree (UPI, cards, net banking). Prices include all charges. Plans renew manually after 1 year.</Text>
+          <Text style={s.note}>Payments are processed securely by Razorpay (UPI, cards, net banking, wallets). Prices include all charges. Plans renew manually after 1 year.</Text>
         </ScrollView>
       )}
     </View>

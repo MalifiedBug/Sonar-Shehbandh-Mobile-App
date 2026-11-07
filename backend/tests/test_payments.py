@@ -1,4 +1,4 @@
-# Iteration 5: Cashfree payments, plans, matrimony gating, shortlist limit, featured listings
+# Razorpay payments (iter11), plans, matrimony gating, shortlist limit, featured listings
 import os, io, uuid, asyncio, sys
 from datetime import date, datetime, timedelta, timezone
 import pytest
@@ -68,6 +68,7 @@ def owner():
     tok, uid = signup("TEST Owner")
     yield tok, uid
     db("delete from sonar.subscriptions where user_id = $1", uid)
+    requests.delete(f"{API}/users/me", headers=H(tok), timeout=T)
 
 
 @pytest.fixture(scope="module")
@@ -75,6 +76,7 @@ def viewer():
     tok, uid = signup("TEST Viewer")
     yield tok, uid
     db("delete from sonar.subscriptions where user_id = $1", uid)
+    requests.delete(f"{API}/users/me", headers=H(tok), timeout=T)
 
 
 @pytest.fixture(scope="module")
@@ -97,7 +99,22 @@ class TestPlans:
         assert j["current"] is None
 
 
-# --- order creation / checkout / status / webhook
+# --- Razorpay order creation / checkout / callback / status / webhook
+RZP_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RZP_KEY = os.environ.get("RAZORPAY_KEY_ID", "")
+
+
+def rzp_sig(order_id, payment_id):
+    import hmac, hashlib
+    return hmac.new(RZP_SECRET.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
+
+
+def new_order(tok, plan="silver"):
+    r = requests.post(f"{API}/payments/order", headers=H(tok), json={"plan": plan}, timeout=T)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 class TestOrders:
     def test_unknown_plan_400(self, viewer):
         assert requests.post(f"{API}/payments/order", headers=H(viewer[0]), json={"plan": "diamond"}, timeout=T).status_code == 400
@@ -105,38 +122,91 @@ class TestOrders:
     def test_order_requires_auth(self):
         assert requests.post(f"{API}/payments/order", json={"plan": "silver"}, timeout=T).status_code == 401
 
-    def test_create_order_server_price(self, viewer, owner):
+    @pytest.mark.parametrize("plan,price", [("silver", 299), ("gold", 999), ("platinum", 2499)])
+    def test_create_order_server_price(self, viewer, plan, price):
         r = requests.post(f"{API}/payments/order", headers=H(viewer[0]),
-                          json={"plan": "silver", "amount": 1, "price": 1, "order_amount": 1}, timeout=T)
+                          json={"plan": plan, "amount": 1, "price": 1, "order_amount": 1}, timeout=T)
         assert r.status_code == 200, r.text
         j = r.json()
-        assert j["amount"] == 299 and j["order_id"].startswith("sonar_silver_")
+        assert j["amount"] == price and j["order_id"].startswith("order_")
         assert j["checkout_url"].endswith(f"/api/payments/checkout/{j['order_id']}")
         row = db("select * from sonar.payments where order_id = $1", j["order_id"], kind="fetchrow")
-        assert float(row["amount"]) == 299.0 and row["status"] == "ACTIVE" and row["user_id"] == viewer[1]
-        # checkout page
+        assert float(row["amount"]) == float(price) and row["status"] == "ACTIVE" and row["user_id"] == viewer[1]
+        assert row["provider"] == "razorpay"
+        # Razorpay itself holds the order at the server price
+        if RZP_SECRET:
+            rz = requests.get(f"https://api.razorpay.com/v1/orders/{j['order_id']}", auth=(RZP_KEY, RZP_SECRET), timeout=T).json()
+            assert rz["amount"] == price * 100 and rz["status"] == "created" and rz["notes"]["user_id"] == viewer[1]
+
+    def test_checkout_page(self, viewer):
+        j = new_order(viewer[0], "gold")
         c = requests.get(j["checkout_url"], timeout=T)
-        assert c.status_code == 200 and "sdk.cashfree.com/js/v3/cashfree.js" in c.text and row["payment_session_id"] in c.text
-        # status for owner -> ACTIVE (unpaid)
+        assert c.status_code == 200
+        t = c.text
+        assert "checkout.razorpay.com/v1/checkout.js" in t
+        assert f'"order_id": "{j["order_id"]}"' in t and '"amount": 99900' in t
+        assert '"key": "rzp_' in t and "/api/payments/razorpay-callback" in t
+        assert RZP_SECRET == "" or RZP_SECRET not in t
+
+    def test_status_owner_only(self, viewer, owner):
+        j = new_order(viewer[0])
         s = requests.get(f"{API}/payments/{j['order_id']}", headers=H(viewer[0]), timeout=T)
         assert s.status_code == 200 and s.json()["status"] == "ACTIVE" and s.json()["subscription"] is None
-        # other user -> 404
         assert requests.get(f"{API}/payments/{j['order_id']}", headers=H(owner[0]), timeout=T).status_code == 404
-        # return page renders
-        rp = requests.get(f"{API}/payments/return", params={"order_id": j["order_id"]}, timeout=T)
-        assert rp.status_code == 200 and "not completed" in rp.text
+        assert requests.get(f"{API}/payments/{j['order_id']}", timeout=T).status_code == 401
 
     def test_checkout_unknown_404(self):
-        assert requests.get(f"{API}/payments/checkout/sonar_nope_123", timeout=T).status_code == 404
+        assert requests.get(f"{API}/payments/checkout/order_nope123", timeout=T).status_code == 404
 
     def test_status_unknown_404(self, viewer):
-        assert requests.get(f"{API}/payments/sonar_nope_123", headers=H(viewer[0]), timeout=T).status_code == 404
+        assert requests.get(f"{API}/payments/order_nope123", headers=H(viewer[0]), timeout=T).status_code == 404
 
-    def test_webhook_bad_signature(self):
-        body = '{"data":{"order":{"order_id":"x"}}}'
-        assert requests.post(f"{API}/payments/webhook", data=body, timeout=T).status_code == 400
-        assert requests.post(f"{API}/payments/webhook", data=body, timeout=T,
-                             headers={"x-webhook-timestamp": "123", "x-webhook-signature": "bad"}).status_code == 400
+    def test_callback_bad_signature(self, viewer):
+        j = new_order(viewer[0])
+        r = requests.post(f"{API}/payments/razorpay-callback", timeout=T, data={
+            "razorpay_order_id": j["order_id"], "razorpay_payment_id": "pay_fake123", "razorpay_signature": "bad"})
+        assert r.status_code == 200 and "Payment not completed" in r.text
+        assert db("select status from sonar.payments where order_id = $1", j["order_id"], kind="fetchval") == "ACTIVE"
+        assert requests.get(f"{API}/plans", headers=H(viewer[0]), timeout=T).json()["current"] is None
+
+    def test_callback_valid_signature_unpaid_order(self, viewer):
+        if not RZP_SECRET:
+            pytest.skip("RAZORPAY_KEY_SECRET not in env")
+        j = new_order(viewer[0])
+        r = requests.post(f"{API}/payments/razorpay-callback", timeout=T, data={
+            "razorpay_order_id": j["order_id"], "razorpay_payment_id": "pay_fake123",
+            "razorpay_signature": rzp_sig(j["order_id"], "pay_fake123")})
+        assert r.status_code == 200 and "Payment not completed" in r.text
+        assert db("select status from sonar.payments where order_id = $1", j["order_id"], kind="fetchval") == "ACTIVE"
+        assert requests.get(f"{API}/plans", headers=H(viewer[0]), timeout=T).json()["current"] is None
+
+    def test_callback_error_metadata(self, viewer):
+        j = new_order(viewer[0])
+        r = requests.post(f"{API}/payments/razorpay-callback", timeout=T, data={
+            "error[code]": "BAD_REQUEST_ERROR", "error[description]": "Payment failed",
+            "error[metadata]": '{"payment_id":"pay_x","order_id":"%s"}' % j["order_id"]})
+        assert r.status_code == 200 and "Payment not completed" in r.text and j["order_id"] in r.text
+        bad = requests.post(f"{API}/payments/razorpay-callback", timeout=T, data={"error[metadata]": "not-json<script>"})
+        assert bad.status_code == 200 and "Payment not completed" in bad.text and "Order: </p>" in bad.text
+        empty = requests.post(f"{API}/payments/razorpay-callback", timeout=T)
+        assert empty.status_code in (200, 400, 422)
+
+    def test_webhook_503_without_secret(self):
+        body = '{"event":"order.paid","payload":{}}'
+        r = requests.post(f"{API}/payments/webhook", data=body, timeout=T, headers={"x-razorpay-signature": "bad"})
+        assert r.status_code == 503, r.text
+
+
+class TestUpgradeRules:
+    def test_lower_plan_409_same_plan_ok(self):
+        tok, uid = signup("TEST Upg")
+        try:
+            db("insert into sonar.subscriptions (user_id, plan, expires_at) values ($1, 'gold', now() + interval '365 days')", uid)
+            assert requests.post(f"{API}/payments/order", headers=H(tok), json={"plan": "silver"}, timeout=T).status_code == 409
+            assert requests.post(f"{API}/payments/order", headers=H(tok), json={"plan": "gold"}, timeout=T).status_code == 200
+            assert requests.post(f"{API}/payments/order", headers=H(tok), json={"plan": "platinum"}, timeout=T).status_code == 200
+        finally:
+            requests.delete(f"{API}/users/me", headers=H(tok), timeout=T)
 
 
 # --- matrimony gating + shortlist limit

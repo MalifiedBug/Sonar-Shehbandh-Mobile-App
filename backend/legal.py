@@ -43,7 +43,7 @@ The app is run by the Sonar Shehbandh community committee ("we") as a private co
 <tr><td>Matrimony biodata</td><td>Personal details, height, birth time and place, rashi/nakshatra and other horoscope details, education, income, family details, partner expectations, photos</td><td>Matrimony matching within the community</td></tr>
 <tr><td>Business listing</td><td>Business name, category, address, phone, WhatsApp, email, Udyam / Shop Act / GST numbers, photos</td><td>Business directory and verification</td></tr>
 <tr><td>Social worker listing</td><td>Name, area of work, phone, WhatsApp, photo</td><td>Social workers directory</td></tr>
-<tr><td>Payments</td><td>Plan bought, amount, order status (card/UPI details are handled by Cashfree, never by us)</td><td>Membership plans</td></tr>
+<tr><td>Payments</td><td>Plan bought, amount, order status (card/UPI details are handled by Razorpay, never by us)</td><td>Membership plans</td></tr>
 <tr><td>Device</td><td>Push notification token</td><td>Send alerts you asked for (approvals, news, events)</td></tr>
 <tr><td>Complaints</td><td>Text you submit</td><td>Respond to your complaint or suggestion</td></tr></table>
 <p>We do not collect your location, contacts, call logs or advertising ID, and we do not show ads.</p>
@@ -58,7 +58,7 @@ The app is run by the Sonar Shehbandh community committee ("we") as a private co
 
 <h2>3. Service providers</h2>
 <ul><li><b>Supabase</b> – secure database and photo storage.</li>
-<li><b>Cashfree Payments</b> – processes plan payments.</li>
+<li><b>Razorpay</b> – processes plan payments.</li>
 <li><b>Emergent</b> – app hosting and push notification delivery.</li></ul>
 <p>They process data only to provide these services. We never sell your personal data.</p>
 
@@ -91,7 +91,7 @@ async def terms():
 <h2>1. Eligibility</h2><p>You must be 18 or older and provide true information about yourself and your family.</p>
 <h2>2. Your content</h2><p>You are responsible for what you submit. Submissions are reviewed by the committee, who may approve, reject or remove any listing that is false, offensive or against community rules. Each module also has its own terms that you accept before submitting.</p>
 <h2>3. Respectful use</h2><p>Do not misuse contact details of other members, send spam, harass anyone, or copy directory data outside the app.</p>
-<h2>4. Plans and payments</h2><p>Paid plans unlock extra features for the period shown at purchase. Payments are processed by Cashfree.</p>
+<h2>4. Plans and payments</h2><p>Paid plans unlock extra features for the period shown at purchase. Payments are processed by Razorpay.</p>
 <h2>5. Matrimony</h2><p>The committee does not guarantee any match. Families must verify all details themselves before proceeding.</p>
 <h2>6. Account</h2><p>Keep your password private. You can delete your account at any time from Profile → Delete Account.</p>
 <h2>7. Changes</h2><p>We may update these terms; continued use means you accept the updated terms.</p>
@@ -119,6 +119,6 @@ async def account_deletion():
 <li>Your account (name, username, password)</li><li>All your registrations: family members, matrimony biodata, business and social worker listings</li>
 <li>All photos you uploaded</li><li>Shortlists, notifications, complaints, plan and payment records</li>
 <li>Your device's link to push notifications (you will stop receiving alerts)</li></ul>
-<h2>What is kept</h2><p>Nothing is kept in the app. Cashfree may keep its own payment transaction records as required by Indian law.</p>
+<h2>What is kept</h2><p>Nothing is kept in the app. Razorpay may keep its own payment transaction records as required by Indian law.</p>
 <p>Deletion cannot be undone. See our <a href="privacy">Privacy Policy</a>.</p>
 """)

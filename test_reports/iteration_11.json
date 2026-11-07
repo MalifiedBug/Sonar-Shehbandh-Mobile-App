@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 11: the Razorpay integration that replaces Cashfree, tested on backend and frontend using the preview URL at 375x667. BACKEND: I rewrote test_payments.py for Razorpay. Result: 24 passed, 1 skipped (the idempotency test needs PAID_ORDER_ID/PAID_TOKEN; it passed when I ran it with a real paid order). Verified: (1) Orders are real Razorpay orders (order_...). The amount comes from the server catalogue (299/999/2499), and a client-supplied amount is ignored; Razorpay itself confirms amount*100 and the notes. Unknown plan returns 400, a lower plan than the active one returns 409, the same or a higher plan returns 200, and no auth returns 401. (2) The checkout page loads checkout.js with the key, amount in paise, order_id and callback_url, and does not contain the secret. An unknown order returns 404, and a paid order's checkout returns 404. (3) Callback with a bad signature: 'Payment not completed', no activation. A valid HMAC signature on an unpaid order: still not activated. error[metadata] with JSON or junk is handled and HTML-escaped. (4) GET /payments/{id} is owner-only (404 for another user, 401 without auth) and shows ACTIVE while unpaid. (5) The webhook returns 503 because the secret is not set. REAL TEST-MODE PAYMENT: Razorpay Checkout offered only Cards and Netbanking (no UPI). I used Netbanking > SBI > 'Success' on the simulator. CRITICAL: the payment ends up 'authorized', not 'captured'. The order stays 'attempted' with amount_paid=0, so the callback shows 'Payment not completed' and the plan is NOT activated. Reproduced on 2 orders. When I captured the payment by hand through the Razorpay API, the next status poll set PAID and activated the plan for 365 days. Repeated status calls and a repeated valid callback did not extend the expiry (idempotent). The paywall unlocked (matrimony detail locked=false). FRONTEND: /plans shows Razorpay in the subtitle and note, with no Cashfree text. Prices and button labels are correct. Tapping Buy (gold) opens the checkout in a new tab, shows plans-checking 'Waiting for payment confirmation…' and disables the buttons. After the capture, the app showed the toast 'Payment successful — plan active!', the Active Business Pro banner, Silver/Gold 'Included in your plan' and 'Upgrade · Pay ₹2499' for Platinum. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/payments/order + razorpay-callback/sync_order", "issue": "The Razorpay account does not capture payments automatically. A successful checkout leaves the payment 'authorized', the order stays 'attempted' with amount_paid=0, and sync_order only accepts order.status=='paid'. Members who pay never get the plan, and Razorpay refunds authorized payments automatically after about 3 days. Reproduced with order_TxBvfJvOEtNi2Y and order_TxC1C3pMBSEvPC (both throwaway users).", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/payments/{order_id}", "issue": "When the plan is activated through the status poll, razorpay_payment_id is stored as NULL: sync_order(order_id) is called without a payment_id, and a later callback returns early because the row is already PAID."},
+      {"endpoint": "GET /api/payments/checkout/{order_id} and GET /api/payments/{order_id}", "issue": "There are 17 old provider='cashfree' rows still in status ACTIVE. Checkout does not filter on provider='razorpay', so an old link would render Razorpay checkout with a Cashfree order id. Polling one of these calls Razorpay and returns 502."},
+      {"endpoint": "sync_order", "issue": "AMOUNT_MISMATCH is returned but never saved, so every poll calls Razorpay again. Status FAILED is never set anywhere."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Buy plan -> Razorpay checkout -> poll", "issue": "Because payments are not captured, the checkout tab shows 'Payment not completed' after a successful payment. The app polls for 2 minutes (40 x 3 s), then shows 'Payment not completed', and the plan never activates. The 2-minute poll window is also short for slow UPI or net-banking payments.", "affected_testIDs": ["plan-buy-silver", "plan-buy-gold", "plan-buy-platinum", "plans-checking"]}
+    ],
+    "design_issues": [
+      {"screen": "/plans", "issues": ["At 375px the Header subtitle 'Support the Sanstha · secure payment by Razorpay' is cut to '...by R…', so the word Razorpay is not visible."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_payments.py", "/app/test_reports/pytest/iter11_payments.xml"],
+  "action_items": [
+    "CRITICAL: Make payments get captured. In POST /payments/order add \"payment\": {\"capture\": \"automatic\", \"capture_options\": {\"automatic_expiry_period\": 12, \"manual_expiry_period\": 7200, \"refund_speed\": \"optimum\"}} to the Razorpay order payload; payment_capture is deprecated. As a fallback in sync_order: if the order is not 'paid', fetch /orders/{id}/payments, and for an 'authorized' payment whose amount equals row.amount*100, POST /payments/{pid}/capture {amount, currency:'INR'}, then treat it as paid. Retest with Netbanking SBI > Success in test mode.",
+    "Save razorpay_payment_id when activation happens through the poll or webhook (take it from the captured payment in /orders/{id}/payments).",
+    "Filter on provider='razorpay' in checkout and status, or mark the old Cashfree ACTIVE rows as EXPIRED, so old links do not render a broken checkout or return 502.",
+    "Shorten the /plans subtitle or let it wrap so 'Razorpay' is visible at 375px. Consider a longer poll window or a 'Check again' button.",
+    "Set RAZORPAY_WEBHOOK_SECRET and register the webhook (order.paid / payment.captured) before going live."
+  ],
+  "critical_code_review_comments": [
+    "payments.py sync_order trusts only order.status=='paid', which requires captured payments; there is no capture logic and no capture setting on the order.",
+    "In activate(), an upgrade (e.g. silver to gold) starts the new plan at the current expiry plus 365 days and gives the higher tier at once. This looks intended, but check it is the policy you want.",
+    "The signature check uses hmac.compare_digest, the result page escapes its HTML, and json.dumps escapes '</' in the checkout options. Good."
+  ],
+  "updated_files": ["/app/backend/tests/test_payments.py"],
+  "success_rate": {"backend": "96% (24/25 pass incl. idempotency with a real paid order; the real-payment activation fails without a manual capture)", "frontend": "90% (UI and polling work; real activation blocked by the capture issue)"},
+  "seed_data_creation": "Throwaway users test_rzp_0ddd39 and test_rzpui_cfca5 were created, paid (captured by hand in Razorpay test mode) and then deleted through DELETE /api/users/me, which cascades their payments and subscriptions. The pytest fixtures now delete their TEST users. admin and inbox_user were not changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use https://sonar-shehbandh.preview.emergentagent.com and export EXPO_PUBLIC_BACKEND_URL. The Razorpay test keys are in the shell env (RAZORPAY_KEY_ID/SECRET), including inside the browser_automation python. Real test payment steps: open checkout_url; in the iframe api.razorpay.com/v1/checkout/public, type a 10-digit mobile with press_sequentially (fill() fails validation), then Netbanking > SBI > Continue (the frame detaches, which is expected). The same tab redirects to the mocksharp bank page; click 'Success'. It then POSTs to /api/payments/razorpay-callback. Check Razorpay /orders/{id}/payments for the status (authorized vs captured). Run the idempotency test with PAID_ORDER_ID and PAID_TOKEN env.",
+  "rca_of_issue": "Repro: create an order, pay through Netbanking SBI > Success. Razorpay then returns order.status='attempted', amount_paid=0, and payment status='authorized', captured=false. Root cause: account capture settings are manual or not configured, and the order payload has no payment.capture='automatic'. sync_order requires status=='paid', so the plan never activates. Mitigation: verified that capturing by hand (POST /v1/payments/{id}/capture) makes the next poll activate the plan. Fix it with order-level auto-capture and/or server-side capture of authorized payments whose amount matches."
+}

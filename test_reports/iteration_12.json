@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 12: retest of the Razorpay capture fix, backend and frontend, using the preview URL. The CRITICAL issue from iteration 11 is FIXED. (1) A real test-mode payment through the hosted checkout (Netbanking > SBI > Success) on a fresh throwaway user and order (order_TxC6mXT5wKiE6a, silver): Razorpay shows the order 'paid' with amount_paid 29900 and the payment 'captured'. The callback page shows 'Payment successful! Your plan is active.', GET /api/plans current shows silver valid for 365 days, and razorpay_payment_id (pay_TxCA5GmlOARpdY) is stored, not NULL. (2) The fallback path also works. I created an order straight through the Razorpay API with no capture setting and added a matching DB row. After the real SBI payment, sync_order captured the authorized payment: the order became paid, the DB row PAID with the payment id stored, and the plan upgraded to gold. (3) For an old provider='cashfree' order (a TEST row inserted for the throwaway user), GET /api/payments/{id} returns 200 with status EXPIRED and saves EXPIRED in the DB, with no 502. Checkout returns 404 for that order and for 3 real old Cashfree orders (checked read-only). (4) AMOUNT_MISMATCH: I faked the Razorpay order fetch (fetch_rzp_order monkeypatched) to return paid with the wrong amount. AMOUNT_MISMATCH was saved; a second sync_order returned it without calling Razorpay again, and no plan was activated. (5) Idempotency: a repeat valid-signature callback plus status polls did not change expires_at, on 3 paid orders. The pytest idempotency test passes with PAID_ORDER_ID/PAID_TOKEN. (6) test_payments.py: 24 passed, 1 skipped (the idempotency test, which needs a real paid order and passed when run separately). The webhook returns 503 because its secret is not set, as expected. FRONTEND at 375x667: the /plans subtitle 'Secure payment by Razorpay' is fully visible (scrollWidth equals clientWidth, 255px). Full UI flow tested: log in, tap plan-buy-gold, checkout opens in a new tab, plans-checking appears, pay with SBI Success. The app poll then shows the Active Business Pro banner valid till 07 Nov 2027, Silver/Gold 'Included in your plan' and Platinum 'Upgrade · Pay ₹2499'. The poll is 100 x 3 s, about 5 minutes. Buttons are 48px tall. No deprecated Expo packages in plans.tsx.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "sonar.payments (legacy)", "issue": "17 old provider='cashfree' rows stay ACTIVE until each one is polled. Checkout returns 404 and status lazily returns EXPIRED, so this is harmless, but a one-time UPDATE to EXPIRED would clean up the data."},
+      {"endpoint": "sync_order", "issue": "Status FAILED is never set. A failed or abandoned payment stays ACTIVE, and the app polls for the full ~5 minutes before showing 'Payment not completed'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_payments.py", "/app/backend/tests/iter12_rzp_helper.py", "/app/test_reports/pytest/iter12_payments.xml"],
+  "action_items": [
+    "Optional: mark the legacy Cashfree ACTIVE rows as EXPIRED with a one-time migration.",
+    "Optional: on /plans, add a 'Check again' button after the poll times out, and stop polling early when the payment failed.",
+    "Before going live: set RAZORPAY_WEBHOOK_SECRET and register the order.paid and payment.captured webhooks."
+  ],
+  "critical_code_review_comments": [
+    "The capture fix is correct. The order payload has payment.capture='automatic' with capture_options. As a fallback, capture_authorized() captures an authorized payment of matching amount and treats an 'already been captured' response as success (safe if the callback and a poll run at the same time).",
+    "Activation is claimed atomically with UPDATE ... WHERE status <> 'PAID' RETURNING, so activate() runs only once. Verified.",
+    "Upgrade policy unchanged: silver to gold sets expiry to the current expiry plus 365 days and gives the higher tier at once (observed 2028-11-06 after silver 2027-11-07). Confirm this is the business rule you want."
+  ],
+  "updated_files": ["/app/backend/tests/iter12_rzp_helper.py (new test helper)"],
+  "success_rate": {"backend": "100% (24/24 plus idempotency; real payment, fallback capture, Cashfree expiry and AMOUNT_MISMATCH all verified)", "frontend": "100% (real end-to-end purchase activated the plan through polling; subtitle not truncated)"},
+  "seed_data_creation": "Throwaway users test_rzp12_d7665f and test_rzpui12_11267 were created, made 3 real test payments (299 and 999 x2) and were deleted with DELETE /api/users/me. Their payments, including the TEST_cf_* and TEST_mm_* rows, were removed by cascade (verified: 0 rows left). The 3 real old Cashfree orders were only read through the checkout GET (404, no state change). admin and inbox_user were not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use helper /app/backend/tests/iter12_rzp_helper.py (new / inspect / status / dbcheck / cf_expired / mismatch / fallback_order / delete) with EXPO_PUBLIC_BACKEND_URL exported; Razorpay keys are in the shell env. Checkout automation: select the frame whose url startswith 'https://api.razorpay.com/v1/checkout/public' (other frames also contain that string). The mobile step is sometimes skipped; 9876543210 is rejected as invalid, use 9123456789. Then Netbanking > SBI > Continue (the frame detaches), then click 'Success' on the mocksharp page.",
+  "rca_of_issue": "Iteration 11 root cause (no capture) is fixed by order-level auto-capture plus a server-side capture fallback. Both were verified with real Razorpay test-mode payments."
+}
