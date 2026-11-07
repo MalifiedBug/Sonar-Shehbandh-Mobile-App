@@ -67,7 +67,7 @@ export function RegistrationView({ reg }: { reg: Reg }) {
       {def.sections.map((sec) => {
         const rows = sec.fields.flatMap((f) => {
           if (f.type === "repeater") {
-            const items: any[] = d[f.key] ?? [];
+            const items: any[] = Array.isArray(d[f.key]) ? d[f.key] : [];
             return items.length
               ? [
                   <View key={f.key}>

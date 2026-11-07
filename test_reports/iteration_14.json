@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 14: retest of the iteration 13 fixes only, frontend at 375x667 on the public preview. ALL REQUESTED FIXES PASS. (1) Bug 3 (aliased user): Playwright route interception rewrote original_app_user_id to '$RCAnonymousID:...' in the RC identify/receipts responses. This simulates a customer whose originalAppUserId is an old anonymous id. Subscribe was enabled (not aria-disabled), the confirm sheet -> RC Test Store 'Test valid purchase' succeeded, the toast 'Pro is active!' and 'Pro is active on this account' appeared, and the receipt response contained the pro entitlement. The purchase was credited to the user: 4/4 fresh browser logins of that user (no interception) showed profile-pro-badge. (2) Race fix: 4/4 fresh logins showed the correct Pro state. (3) For a Pro user, plan-buy-silver reads 'Included in your plan' and has aria-disabled=true. (4) The profile-plans subtitle reads 'Sonar Pro active — managed in your app store'. (5) Web photos: the detail <img> srcs carry &store_pro=1 and all /api/files requests return 200, so full/half photos load. (6) A matrimony record with relatives as the string 'Uncle X' opens with no crash and no pageerror (the value is ignored silently). (7) Regression: Restore says 'Pro restored' for the Pro user and 'No active Pro subscription found' for the other user. After logout and login as a non-Pro user: no badge, the 'Unlock…' subtitle, Subscribe enabled, no X-Store-Pro header, and Buy silver opens /api/payments/checkout/order_*. Switching back to the Pro user shows the badge again. Paywall flow: on a locked detail, View Plans -> buy -> back shows the detail unlocked. One new minor issue was found (cold-start stale lock, below).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/registrations (matrimony)", "issue": "The backend still accepts non-array repeater values (data.relatives='Uncle X'). The frontend no longer crashes, but it silently hides the value. Validate the type on the backend."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Cold start / reload with Pro (stale locked data)", "issue": "On a reload or deep link straight to /detail/{id} with a remembered session, the detail is fetched before Purchases.logIn binds and before setStorePro(true). Nothing refetches when isSubscribed flips, because useLoad only reloads on deps/focus. The Pro user keeps seeing detail-locked-card (still locked after 7.5s). In-app navigation and the paywall->buy->back flow are fine. On phones this hits cold starts and push-notification deep links. Fix: refetch/invalidate the screen data when isSubscribed changes (e.g. a storePro version in the useLoad deps, or an event from setStorePro).", "testID": "detail-locked-card", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/plans", "issues": ["For a store-Pro user, Business Pro still reads 'Buy · Pay ₹999' (currentRank ignores store Pro). It works as an upgrade but has no proration note. Optional: label it 'Upgrade'.", "The Test Store price of $79.99 is a known item and was ignored as requested."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/seed_iter13_ui.py"],
+  "action_items": [
+    "MEDIUM: Refetch the data on the focused screen when isSubscribed changes (cold start / deep link to detail shows locked data for a Pro user until the screen refocuses).",
+    "MINOR: Validate on the backend that matrimony repeater fields (relatives etc.) are arrays.",
+    "Security reminder (owner accepted): X-Store-Pro / store_pro=1 are trusted from any client."
+  ],
+  "critical_code_review_comments": [
+    "revenuecat.tsx: identityReady = bound (logIn succeeded for user.id). The purchase guard uses isAnonymous()/getAppUserID(). Both are correct.",
+    "If Purchases.logIn throws, bound stays false and nothing retries. The user sees the identity error and a disabled Subscribe until the next auth change. Consider a retry.",
+    "fileSource builds the URL at render time with module-level storePro. Images rendered before bind keep the URL without store_pro until they re-render."
+  ],
+  "updated_files": ["/app/test_reports/iteration_14.json"],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100% of the requested retest items pass; 1 new medium issue (cold-start stale lock)"},
+  "seed_data_creation": "seed_iter13_ui.py new created an owner, a TEST_ matrimony and a TEST_ business, plus 2 throwaway users. All were deleted by id (all 200). RC Test Store purchases were made for the throwaway users only.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To simulate an aliased RC customer: page.route('api.revenuecat.com') and replace original_app_user_id with '$RCAnonymousID:...' in the responses. The confirm sheet button is outside the viewport at 375x667, so use locator.evaluate('e=>e.click()'). Purchase: store-pro-subscribe -> store-pro-confirm-buy -> text 'Test valid purchase'.",
+  "rca_of_issue": "Cold-start lock: api.ts storePro is a module variable flipped by the useEffect in revenuecat.tsx after logIn. Screens mounted earlier fetched without X-Store-Pro and useLoad(deps [id]) never re-runs on that flip."
+}

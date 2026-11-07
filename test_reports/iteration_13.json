@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 13: RevenueCat 'Sonar Pro' (Test Store on web preview) + X-Store-Pro header gating. BACKEND: 20/20 pytest pass (/app/backend/tests/test_iter13_store_pro.py). Business list/detail unlock with X-Store-Pro: 1 and stay locked without it or with other values (0/true/yes/2). gst/udyam/shop_act and member emergency contacts stay hidden even with the header. Matrimony full biodata + full/half photos return 200 with the header and 403 without, for both bearer and web file-token. Shortlist 402 at 6 is lifted with the header. CORS preflight allows x-store-pro. Razorpay order creation still works. FRONTEND (375x667): app loads, no crash from module-scope RC init. /plans shows store-pro-card with the SIMULATED badge, the price from the offering ($79.99), the Subscribe button, a working custom confirm sheet (cancel/buy), the RC Test Store modal, the 'Pro is active' card, a working Restore (both toasts), and the 3 Razorpay cards below; Buy silver opens /api/payments/checkout/order_*. With Pro active: X-Store-Pro: 1 is sent on API calls, the profile shows profile-pro-badge, the business list shows Quick Call/WhatsApp, and matrimony detail shows full biodata. After logout and login as another user: no badge, no header, data locked. TWO CRITICAL FRONTEND BUGS FOUND. #1 (identity race + purchase not reflected) is FIXED by me in src/revenuecat.tsx and retested. #2 (identityReady/purchase guard based on originalAppUserId) is still OPEN.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/registrations (matrimony)", "issue": "Repeater fields (e.g. data.relatives) accept non-array values. A string value crashes the detail screen with 'items.map is not a function' (RegistrationView.tsx:74) for anyone who can see full biodata. Validate the type on the backend and/or use Array.isArray on the frontend."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StoreProCard identity", "issue": "FIXED BY TESTING AGENT. Race in src/revenuecat.tsx: the customer-info query (Purchases.getCustomerInfo, still anonymous) ran at the same time as Purchases.logIn(user.id). When the anonymous response arrived after logIn, it overwrote the cached identified customerInfo. Reproduced in about 50% of fresh logins: Subscribe stuck disabled for 60s+ and, for a user who already had Pro, isSubscribed=false, so no X-Store-Pro header, no badge and data stayed locked. Restore did not recover it. Fix: the query is enabled only after logIn binds the user (boundId state), in-flight queries are cancelled before setQueryData, and the logOut path clears boundId.", "testID": "store-pro-subscribe", "priority": "CRITICAL"},
+      {"component": "StoreProCard purchase result", "issue": "FIXED BY TESTING AGENT. After 'Test valid purchase' on web the card stayed on 'Subscribe' because the purchase result was never written to the query cache and addCustomerInfoUpdateListener does not fire in browser mode. Pro only showed after re-login. Fix: purchaseMutation/restoreMutation onSuccess -> setQueryData(['revenuecat','customer-info']). Retested: the toast shows and 'Pro is active' appears immediately.", "testID": "store-pro-confirm-buy", "priority": "HIGH"},
+      {"component": "StoreProCard identityReady", "issue": "OPEN. identityReady = originalAppUserId === user.id, and the purchase guard rejects originalAppUserId starting with '$RCAnonymousID:'. originalAppUserId is the FIRST id RC saw. If a customer was created as anonymous and then aliased by logIn (which happened for affected users because of the race above), originalAppUserId stays $RCAnonymousID:..., so Subscribe stays disabled forever for that user. Reproduced with a throwaway user after the fix. Use the logIn success (boundId === user.id) and `await Purchases.getAppUserID() === user.id` / `!(await Purchases.isAnonymous())` instead.", "testID": "store-pro-subscribe", "priority": "CRITICAL"},
+      {"component": "Matrimony detail photos (web preview)", "issue": "Web fileSource() uses ?token= on <img> and cannot send X-Store-Pro, so a Pro user on the web preview gets 403 on full/half photos (blank frames). Native sends headers, so this only affects the web preview. If web parity is wanted, add a query flag the backend accepts.", "testID": "detail photos", "priority": "LOW"},
+      {"component": "Plans/Profile with Pro active", "issue": "The Razorpay Matrimony Plus card still offers 'Buy · Pay ₹299' (currentRank ignores store Pro), so users can double-pay. The profile 'Membership Plans' row still says 'Unlock full biodata & business contacts' for a Pro user.", "testID": "plan-buy-silver / profile-plans", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/plans", "issues": ["The Test Store product shows $79.99 (product pro.annual), not the configured ₹299 / $3.99. Update the Test Store product price so the preview matches the ₹299 Razorpay Matrimony Plus."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter13_store_pro.py", "/app/backend/tests/seed_iter13_ui.py", "/app/test_reports/pytest/pytest_iter13.xml"],
+  "action_items": [
+    "CRITICAL: Replace the originalAppUserId-based identityReady and the purchase guard in src/revenuecat.tsx with the logIn success / Purchases.getAppUserID() / isAnonymous(). Affected (aliased) users can never subscribe right now.",
+    "Review the testing agent's fix in src/revenuecat.tsx (boundId gating, cancelQueries before setQueryData, mutation onSuccess setQueryData) and keep it.",
+    "Security (owner accepted, but flag it): X-Store-Pro is trusted from ANY client, including web/curl. Any free user can unlock all paid data and skip Razorpay by adding one header. Consider server-side verification (RevenueCat webhook -> DB entitlement) later.",
+    "Hide or mark as included the Razorpay Matrimony Plus card when store Pro is active, and update the profile plans subtitle.",
+    "Fix the Test Store product price ($79.99 -> ₹299/$3.99).",
+    "Validate the type of matrimony repeater fields (relatives) on the backend and guard Array.isArray in RegistrationView."
+  ],
+  "critical_code_review_comments": [
+    "paid_rank() trusts X-Store-Pro: 1 with no verification. Anyone can unlock everything, on web too, where store billing is not even offered.",
+    "rcEnabled = Platform.OS !== 'web' || __DEV__: production web correctly hides the store card. The preview (dev) shows it alongside Razorpay.",
+    "Before the fix, customerInfo was cached with no tie to the bound identity, so stale/anonymous info could drive isSubscribed and the header."
+  ],
+  "updated_files": ["/app/frontend/src/revenuecat.tsx", "/app/backend/tests/test_iter13_store_pro.py", "/app/backend/tests/seed_iter13_ui.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "~85%: all requested flows pass after the testing-agent fix; the identityReady bug for aliased users is still open"},
+  "seed_data_creation": "Throwaway TEST users, a TEST_ business, TEST_ matrimony and shortlist profiles. All were deleted by id (seed_iter13_ui.py delete -> 200s; pytest fixtures delete the rest). RevenueCat Test Store purchases were made for throwaway users only, which no longer exist.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use /app/backend/tests/seed_iter13_ui.py new|delete (export EXPO_PUBLIC_BACKEND_URL); state is in /tmp/iter13_ui.json. Purchase flow: store-pro-subscribe -> store-pro-confirm-buy -> click text 'Test valid purchase' in the RC Test Store modal. Toasts: [data-testid=toast-message], which disappears fast, so poll it. Use request.all_headers() to see X-Store-Pro. Navigate in-app (tab-profile -> profile-plans, tab-community -> community-dir-business); a page.goto reloads and re-runs RC init. To check the identity race, log in with a fresh browser several times and see whether Subscribe is aria-disabled.",
+  "rca_of_issue": "Race: EnabledProvider started useQuery(getCustomerInfo) and the logIn effect in the same tick once user was set. purchases-js answered GET /subscribers/$RCAnonymousID after POST /subscribers/identify, and react-query overwrote the identified data. That anonymous GET also created an anonymous RC customer, so identify aliased the user onto it and originalAppUserId became permanently $RCAnonymousID:..., which causes the still-open identityReady bug. Repro: fresh browser, log in, open /plans; Subscribe is disabled (about 50%), or a Pro user shows no badge. Mitigation applied: gate the query on a successful logIn (boundId) and cancel in-flight queries."
+}

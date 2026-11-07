@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { makeStyles, useTheme } from "@/src/theme";
 import { api, useLoad } from "@/src/api";
 import { Btn, Header, Icon, useToast } from "@/src/components/ui";
+import { StoreProCard } from "@/src/components/StorePro";
+import { useSubscription } from "@/src/revenuecat";
 
 type Plan = { id: string; rank: number; name: string; price: number; features: string[] };
 type PlansRes = { plans: Plan[]; current: { plan: string; expires_at: string } | null };
@@ -23,6 +25,9 @@ export default function Plans() {
   useEffect(() => () => { alive.current = false; }, []);
 
   const currentRank = data?.plans.find((p) => p.id === data.current?.plan)?.rank ?? 0;
+  const sub = useSubscription();
+  // Phones must sell digital plans through store billing; Razorpay stays on the web.
+  const showRazorpay = Platform.OS === "web";
 
   const poll = async (orderId: string) => {
     setChecking(orderId);
@@ -62,7 +67,7 @@ export default function Plans() {
 
   return (
     <View style={s.root}>
-      <Header title="Membership Plans / सदस्यता योजना" subtitle="Secure payment by Razorpay" />
+      <Header title="Membership Plans / सदस्यता योजना" subtitle={Platform.OS === "web" ? "Secure payment by Razorpay" : "Billed securely by your app store"} />
       {loading ? (
         <ActivityIndicator color={colors.brand} style={{ marginTop: 48 }} />
       ) : (
@@ -82,7 +87,9 @@ export default function Plans() {
               <Text style={s.checkingText}>Waiting for payment confirmation… / पेमेंटची पुष्टी होत आहे</Text>
             </View>
           ) : null}
-          {(data?.plans ?? []).map((p) => {
+          <StoreProCard />
+          {showRazorpay ? <Text style={s.or}>{sub ? "Or buy a yearly plan with Razorpay (web)" : ""}</Text> : null}
+          {(showRazorpay ? data?.plans ?? [] : []).map((p) => {
             const owned = currentRank >= p.rank;
             const best = p.id === "gold";
             return (
@@ -102,9 +109,9 @@ export default function Plans() {
                   </View>
                 ))}
                 <Btn
-                  label={owned ? "Included in your plan" : currentRank ? `Upgrade · Pay ₹${p.price}` : `Buy · Pay ₹${p.price}`}
+                  label={owned || (p.rank === 1 && sub?.isSubscribed) ? "Included in your plan" : currentRank ? `Upgrade · Pay ₹${p.price}` : `Buy · Pay ₹${p.price}`}
                   variant={best ? "maroon" : "primary"}
-                  disabled={owned || !!checking}
+                  disabled={owned || (p.rank === 1 && !!sub?.isSubscribed) || !!checking}
                   loading={busy === p.id}
                   onPress={() => buy(p)}
                   style={{ marginTop: 8 }}
@@ -113,7 +120,9 @@ export default function Plans() {
               </View>
             );
           })}
-          <Text style={s.note}>Payments are processed securely by Razorpay (UPI, cards, net banking, wallets). Prices include all charges. Plans renew manually after 1 year.</Text>
+          {showRazorpay ? (
+            <Text style={s.note}>Payments are processed securely by Razorpay (UPI, cards, net banking, wallets). Prices include all charges. Plans renew manually after 1 year.</Text>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -138,4 +147,5 @@ const useStyles = makeStyles((c) => ({
   feat: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   featText: { flex: 1, fontSize: 14, color: c.onSurfaceSecondary, lineHeight: 20 },
   note: { fontSize: 12, color: c.muted, textAlign: "center", lineHeight: 18 },
+  or: { fontSize: 12.5, fontWeight: "700", color: c.muted, textAlign: "center", marginTop: 4 },
 }));

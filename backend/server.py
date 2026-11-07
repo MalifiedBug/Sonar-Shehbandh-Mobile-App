@@ -426,7 +426,9 @@ async def upload(file: UploadFile = File(...), user: User = Depends(current_user
 
 
 @api.get("/files/{path:path}")
-async def download(path: str, token: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None)):
+async def download(path: str, token: Optional[str] = Query(default=None), authorization: Optional[str] = Header(default=None),
+                   x_store_pro: Optional[str] = Header(default=None), store_pro: Optional[str] = Query(default=None)):
+    x_store_pro = x_store_pro or store_pro  # web <img> can't send headers
     # Header = normal login token (native). Query = short-lived photo-only token from /auth/file-token (web).
     if authorization and authorization.lower().startswith("bearer "):
         user = await user_from_token(authorization.split(" ", 1)[1])
@@ -441,7 +443,7 @@ async def download(path: str, token: Optional[str] = Query(default=None), author
             raise HTTPException(404, "File not found")
         # Free users only see the matrimony portrait; full/half photos need a plan.
         public = any(r["type"] != "matrimony" or ((r["photos"] or {}).get("portrait") or {}).get("path") == path for r in regs)
-        if not public and await payments.active_rank(user.id) < 1:
+        if not public and await paid_rank(user, x_store_pro) < 1:
             raise HTTPException(403, "A plan is needed to view this photo")
     try:
         data = await run_in_threadpool(storage.get_object, path)
@@ -492,6 +494,13 @@ class RegistrationIn(BaseModel):
 
 def reg_out(r: Registration) -> dict:
     return r.out()
+
+
+async def paid_rank(user: "User", x_store_pro: Optional[str]) -> int:
+    """Razorpay plan rank, or Matrimony Plus level (1) when the phone reports an active store "Pro" subscription.
+    The store subscription is checked on the phone only (owner's choice), so this header is trusted as-is."""
+    rank = await payments.active_rank(user.id)
+    return max(rank, 1) if x_store_pro == "1" else rank
 
 
 # Government IDs and third-party emergency contacts: only the owner and the committee (admins) may see them.
@@ -567,7 +576,8 @@ SEARCH_KEYS = ["district", "city_district", "taluka", "operating_area", "work_lo
 
 
 @api.get("/registrations")
-async def list_registrations(type: str, q: str = "", sub_caste: str = "", category: str = "", user: User = Depends(current_user)):
+async def list_registrations(type: str, q: str = "", sub_caste: str = "", category: str = "", user: User = Depends(current_user),
+                             x_store_pro: Optional[str] = Header(default=None)):
     conds, args = ["type = $1", "status = 'approved'"], [type]
     if type == "matrimony":
         conds.append("expires_at > now()")
@@ -592,7 +602,7 @@ async def list_registrations(type: str, q: str = "", sub_caste: str = "", catego
         for r in regs:
             r.featured = ranks.get(r.owner_id, 0) >= need
         regs.sort(key=lambda r: not r.featured)
-    if type in ("matrimony", "business") and user.role != "admin" and await payments.active_rank(user.id) < 1:
+    if type in ("matrimony", "business") and user.role != "admin" and await paid_rank(user, x_store_pro) < 1:
         for r in regs:
             if r.owner_id != user.id:
                 lock_reg(r)
@@ -608,7 +618,7 @@ async def my_registrations(user: User = Depends(current_user)):
 
 
 @api.get("/registrations/{rid}")
-async def get_registration(rid: str, user: User = Depends(current_user)):
+async def get_registration(rid: str, user: User = Depends(current_user), x_store_pro: Optional[str] = Header(default=None)):
     row = await pg.fetchrow("select * from sonar.registrations where id = $1", rid)
     if not row:
         raise HTTPException(404, "Not found")
@@ -616,7 +626,7 @@ async def get_registration(rid: str, user: User = Depends(current_user)):
     if reg.status != "approved" and reg.owner_id != user.id and user.role != "admin":
         raise HTTPException(404, "Not found")
     # Full matrimony biodata and business contacts need any paid plan (owner and admins always see everything).
-    if reg.type in ("matrimony", "business") and reg.owner_id != user.id and user.role != "admin" and await payments.active_rank(user.id) < 1:
+    if reg.type in ("matrimony", "business") and reg.owner_id != user.id and user.role != "admin" and await paid_rank(user, x_store_pro) < 1:
         lock_reg(reg)
     hide_private(reg, user)
     return reg_out(reg)
@@ -755,13 +765,13 @@ async def my_shortlist(user: User = Depends(current_user)):
 
 
 @api.post("/shortlist/{rid}")
-async def toggle_shortlist(rid: str, user: User = Depends(current_user)):
+async def toggle_shortlist(rid: str, user: User = Depends(current_user), x_store_pro: Optional[str] = Header(default=None)):
     if await pg.execute("delete from sonar.shortlists where user_id = $1 and registration_id = $2", user.id, rid):
         return {"shortlisted": False}
     ok = await pg.fetchval("select 1 from sonar.registrations where id = $1 and type = 'matrimony' and status = 'approved'", rid)
     if not ok:
         raise HTTPException(404, "Profile not found")
-    if await payments.active_rank(user.id) < 1 and user.role != "admin":
+    if await paid_rank(user, x_store_pro) < 1 and user.role != "admin":
         if await pg.fetchval("select count(*) from sonar.shortlists where user_id = $1", user.id) >= FREE_SHORTLIST_LIMIT:
             raise HTTPException(402, f"Free members can shortlist up to {FREE_SHORTLIST_LIMIT} profiles. Get Matrimony Plus for unlimited.")
     await pg.execute("insert into sonar.shortlists (user_id, registration_id, created_at) values ($1, $2, $3) on conflict do nothing",
@@ -939,7 +949,7 @@ app.add_middleware(
     allow_origins=[o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()],
     allow_origin_regex=r"https://([a-z0-9-]+\.)*(emergentagent\.com|emergent\.host)",
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Store-Pro"],
 )
 
 

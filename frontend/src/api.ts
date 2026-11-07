@@ -13,6 +13,19 @@ export const setToken = (t: string | null) => {
 };
 export const getToken = () => token;
 
+// Set by the RevenueCat provider when the phone's store "Pro" subscription is active.
+let storePro = false;
+const storeProListeners = new Set<() => void>();
+export const setStorePro = (v: boolean) => {
+  if (storePro === v) return;
+  storePro = v;
+  storeProListeners.forEach((fn) => fn()); // open screens reload so Pro details appear without a refocus
+};
+const authHeaders = (): Record<string, string> => ({
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  ...(storePro ? { "X-Store-Pro": "1" } : {}),
+});
+
 export class ApiError extends Error {
   status: number;
   constructor(msg: string, status: number) {
@@ -24,7 +37,7 @@ export class ApiError extends Error {
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`${BACKEND}/api${path}`, {
     method: opts.method ?? "GET",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const text = await res.text();
@@ -44,8 +57,8 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 
 export function fileSource(path: string) {
   // Web can't send headers for <img>, so it uses a short-lived photo-only token, never the login token.
-  if (Platform.OS === "web") return { uri: `${BACKEND}/api/files/${path}?token=${fileToken ?? ""}` };
-  return { uri: `${BACKEND}/api/files/${path}`, headers: { Authorization: `Bearer ${token}` } };
+  if (Platform.OS === "web") return { uri: `${BACKEND}/api/files/${path}?token=${fileToken ?? ""}${storePro ? "&store_pro=1" : ""}` };
+  return { uri: `${BACKEND}/api/files/${path}`, headers: authHeaders() };
 }
 
 let fileToken: string | null = null;
@@ -110,6 +123,17 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [run, depKey]),
   );
+
+  // Reload when the store Pro status flips (e.g. cold start / deep link before RevenueCat login finished).
+  useEffect(() => {
+    const fn = () => {
+      run();
+    };
+    storeProListeners.add(fn);
+    return () => {
+      storeProListeners.delete(fn);
+    };
+  }, [run]);
 
   return { data, setData, loading, refreshing, error, reload: () => run(true) };
 }

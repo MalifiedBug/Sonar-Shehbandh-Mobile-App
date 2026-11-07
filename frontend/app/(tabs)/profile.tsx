@@ -10,6 +10,7 @@ import { Btn, Icon, Sheet, useToast } from "@/src/components/ui";
 import { TextField } from "@/src/components/fields";
 import { Badge, Card, Initials, Overline } from "@/src/components/kit";
 import { MORE_ITEMS } from "@/src/constants";
+import { useSubscription } from "@/src/revenuecat";
 
 type PlansRes = { plans: { id: string; name: string }[]; current: { plan: string; expires_at: string } | null };
 
@@ -38,6 +39,7 @@ export default function Profile() {
   const { data: plans } = useLoad(() => api<PlansRes>("/plans"));
   const plan = plans?.current ? plans.plans.find((p) => p.id === plans.current!.plan) : null;
   const isAdmin = user?.role === "admin";
+  const sub = useSubscription();
   const [confirm, setConfirm] = useState(false);
   const [typed, setTyped] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -66,6 +68,7 @@ export default function Profile() {
           <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
             <Badge label={isAdmin ? "Committee Admin" : "Verified Member"} icon="check-decagram" tone="success" testID="profile-role-badge" />
             {plan ? <Badge label={`${plan.name} Plan`} icon="crown" tone="gold" testID="profile-plan-badge" /> : null}
+            {sub?.isSubscribed ? <Badge label="Sonar Pro" icon="star-circle" tone="gold" testID="profile-pro-badge" /> : null}
           </View>
         </View>
       </Card>
@@ -76,7 +79,7 @@ export default function Profile() {
         <Row
           icon="crown-outline"
           label="Membership Plans / योजना"
-          sub={plan ? `Active until ${new Date(plans!.current!.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : "Unlock full biodata & business contacts"}
+          sub={plan ? `Active until ${new Date(plans!.current!.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : sub?.isSubscribed ? "Sonar Pro active — managed in your app store" : "Unlock full biodata & business contacts"}
           onPress={() => router.push("/plans")}
           testID="profile-plans"
         />

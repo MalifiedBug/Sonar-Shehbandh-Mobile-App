@@ -16,6 +16,14 @@ import { ToastProvider, Btn, Sheet } from "@/src/components/ui";
 import { colors, FONT_FILES, FONTS } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
 import { Notifications } from "@/src/notifications";
+import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
+
+// RevenueCat: configure once per launch, before any component mounts.
+try {
+  initializeRevenueCat();
+} catch (err) {
+  console.warn("RevenueCat unavailable:", err);
+}
 import { registerForPush } from "@/src/push";
 
 LogBox.ignoreAllLogs(true);
@@ -157,7 +165,9 @@ export default function RootLayout() {
               {fontsLoaded ? (
                 <ToastProvider>
                   <AuthProvider>
-                    <Gate />
+                    <SubscriptionProvider>
+                      <Gate />
+                    </SubscriptionProvider>
                   </AuthProvider>
                 </ToastProvider>
               ) : (
